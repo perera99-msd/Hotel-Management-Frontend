@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAuth } from "../../context/AuthContext";
 
-// Define the menu item interface based on NewMenuItemPopup form data
+// Define the menu item interface
 interface MenuItem {
     id: string;
     name: string;
@@ -23,21 +24,20 @@ interface OrderItem {
     quantity: number;
 }
 
-// Define the order data interface
-interface OrderData {
-    guestName: string;
-    roomNumber?: string;
-    tableNumber?: string;
-    specialNotes?: string;
-    items: OrderItem[];
-    totalAmount: number;
-    status: string;
+// Define Guest interface
+interface Guest {
+    _id: string;
+    name: string;
+    email: string;
 }
 
 export default function ManualOrderView() {
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+    const [guests, setGuests] = useState<Guest[]>([]); // Store guests for the dropdown
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { token } = useAuth();
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
     // Form state
     const [formData, setFormData] = useState({
@@ -50,48 +50,46 @@ export default function ManualOrderView() {
     // Selected items state
     const [selectedItems, setSelectedItems] = useState<OrderItem[]>([]);
 
-    // Replace API endpoint
-    const fetchMenuItems = async () => {
+    // Fetch Data from Backend
+    const fetchData = async () => {
         try {
             setLoading(true);
-            // const response = await fetch("/api/menu-items");
-            // if (!response.ok) throw new Error("Failed to fetch menu items");
-            // const data = await response.json();
+            const headers = { 'Authorization': `Bearer ${token}` };
 
-            // mock data
-            const mockData: MenuItem[] = [
-                {
-                    id: "1",
-                    name: "Continental Breakfast",
-                    category: "breakfast",
-                    description: "Traditional continental breakfast selection",
-                    ingredients: ["Bread", "Butter", "Jam", "Coffee", "Juice"],
-                    price: 15,
-                    available: true
-                },
-                {
-                    id: "2",
-                    name: "Grilled Salmon",
-                    category: "dinner",
-                    description: "Fresh Atlantic salmon with herbs and lemon",
-                    ingredients: ["Salmon", "Herbs", "Lemon", "Olive Oil"],
-                    price: 28,
-                    available: true
-                }
-            ];
+            // Fetch Menu Items and Users (Guests) in parallel
+            const [menuRes, userRes] = await Promise.all([
+                fetch(`${API_URL}/api/menu`, { headers }),
+                fetch(`${API_URL}/api/users`, { headers })
+            ]);
 
-            setMenuItems(mockData);
+            if (!menuRes.ok) throw new Error("Failed to fetch menu items");
+            
+            const menuData = await menuRes.json();
+            // Map _id to id
+            const formattedMenu = menuData.map((item: any) => ({
+                ...item,
+                id: item._id || item.id
+            }));
+            setMenuItems(formattedMenu);
+
+            // Load guests if available
+            if (userRes.ok) {
+                const usersData = await userRes.json();
+                // Filter users to show only customers if needed, or show all
+                setGuests(usersData);
+            }
+
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to load menu items");
-            console.error("Error fetching menu items:", err);
+            setError(err instanceof Error ? err.message : "Failed to load data");
+            console.error("Error loading data:", err);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchMenuItems();
-    }, []);
+        if (token) fetchData();
+    }, [token]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -168,53 +166,44 @@ export default function ManualOrderView() {
         }
 
         try {
-            const orderData: OrderData = {
+            // Attempt to find a matching guest ID if the name matches exactly
+            const matchedGuest = guests.find(g => g.name.toLowerCase() === formData.guestName.toLowerCase());
+
+            const orderData = {
+                guestId: matchedGuest?._id, // Send ID if found
                 guestName: formData.guestName,
                 roomNumber: formData.roomNumber || undefined,
                 tableNumber: formData.tableNumber || undefined,
                 specialNotes: formData.specialNotes || undefined,
-                items: selectedItems,
-                totalAmount: calculateTotal(),
-                status: "pending"
+                items: selectedItems.map(item => ({
+                    menuItemId: item.menuItemId,
+                    quantity: item.quantity
+                })),
+                totalAmount: calculateTotal()
             };
 
-            // Replace  API endpoint
-
-            /* const apiEndpoint = "/api/orders";
-               
-               const response = await fetch(apiEndpoint, {
+            const response = await fetch(`${API_URL}/api/orders`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify(orderData),
-                });
-         
-                if (response.ok) {
-               
-                 setFormData({
-                  guestName: "",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify(orderData),
+            });
+
+            if (response.ok) {
+                setFormData({
+                    guestName: "",
                     roomNumber: "",
                     tableNumber: "",
                     specialNotes: ""
-                  });
-                  setSelectedItems([]);
-                  alert("Order created successfully!");
-                } else {
-                  throw new Error("Failed to create order");
-                }
-               */
-
-            console.log("Order data to be saved:", orderData);
-            alert("Order created successfully! This will be integrated with the ordering system.");
-
-            setFormData({
-                guestName: "",
-                roomNumber: "",
-                tableNumber: "",
-                specialNotes: ""
-            });
-            setSelectedItems([]);
+                });
+                setSelectedItems([]);
+                alert("Order created successfully!");
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Failed to create order");
+            }
 
         } catch (err) {
             console.error("Error creating order:", err);
@@ -240,9 +229,9 @@ export default function ManualOrderView() {
             <div className="bg-white p-6 rounded-lg shadow text-black">
                 <h3 className="text-lg font-semibold mb-6">Create Manual Order</h3>
                 <div className="text-center text-red-600">
-                    <p className="mb-2">Error loading menu items</p>
+                    <p className="mb-2">{error}</p>
                     <button
-                        onClick={fetchMenuItems}
+                        onClick={fetchData}
                         className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                     >
                         Retry
@@ -265,11 +254,21 @@ export default function ManualOrderView() {
                             <input
                                 type="text"
                                 name="guestName"
+                                list="guest-list" // Connects to the datalist below
                                 value={formData.guestName}
                                 onChange={handleInputChange}
                                 className="w-full border rounded px-3 py-2 text-black"
-                                placeholder="Enter guest name"
+                                placeholder="Enter or select guest name"
+                                autoComplete="off"
                             />
+                            {/* Hidden Datalist to display customers without changing UI structure */}
+                            <datalist id="guest-list">
+                                {guests.map((guest) => (
+                                    <option key={guest._id} value={guest.name}>
+                                        {guest.email}
+                                    </option>
+                                ))}
+                            </datalist>
                         </div>
 
                         <div>
@@ -281,6 +280,7 @@ export default function ManualOrderView() {
                                 className="w-full border rounded px-3 py-2 text-black"
                             >
                                 <option value="">Select room (optional)</option>
+                                {/* In a real app, these rooms would also be fetched from API */}
                                 <option value="101">Room 101</option>
                                 <option value="102">Room 102</option>
                                 <option value="103">Room 103</option>
@@ -397,7 +397,8 @@ export default function ManualOrderView() {
 
                     <button
                         onClick={handleCreateOrder}
-                        className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 transition-colors w-full font-semibold"
+                        disabled={selectedItems.length === 0}
+                        className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 transition-colors w-full font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Create Order
                     </button>

@@ -23,19 +23,22 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   role: string | null;
+  token: string | null; // Added token here
 }
 
 const AuthContext = createContext<AuthContextType>({ 
   user: null, 
   profile: null,
   loading: true, 
-  role: null 
+  role: null,
+  token: null // Added default token value
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null); // Added token state
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
@@ -47,10 +50,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (firebaseUser) {
         setUser(firebaseUser);
         try {
-            const token = await firebaseUser.getIdToken();
+            const idToken = await firebaseUser.getIdToken();
+            setToken(idToken); // Store token in state
+
             const res = await fetch(`${API_URL}/api/users/me`, {
                 headers: { 
-                  'Authorization': `Bearer ${token}`,
+                  'Authorization': `Bearer ${idToken}`,
                   'Content-Type': 'application/json'
                 }
             });
@@ -70,6 +75,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(null);
         setProfile(null);
         setRole(null);
+        setToken(null); // Clear token
       }
       setLoading(false);
     });
@@ -97,7 +103,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [user, loading, role, pathname, router]);
 
-  // ✅ FIX: Render a Loading Spinner instead of nothing/black screen
+  // Render a Loading Spinner instead of nothing/black screen
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen w-screen bg-white">
@@ -110,7 +116,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, role }}>
+    <AuthContext.Provider value={{ user, profile, loading, role, token }}>
       {children}
     </AuthContext.Provider>
   );
