@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useContext } from "react";
 import Image from "next/image";
+import { AuthContext } from "@/app/context/AuthContext";
 
 interface Package {
     id: number;
@@ -33,6 +34,7 @@ export default function BookingModal({
     isOpen,
     onClose,
 }: BookingModalProps) {
+    const { user, profile } = useContext(AuthContext);
     const [guests, setGuests] = useState(1);
     const [tripDate, setTripDate] = useState("");
     const [guestInfo, setGuestInfo] = useState<GuestInfo>({
@@ -42,6 +44,17 @@ export default function BookingModal({
     });
     const [loading, setLoading] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState(false);
+
+    // Auto-populate user details when modal opens
+    useEffect(() => {
+        if (isOpen && (profile || user)) {
+            setGuestInfo({
+                fullName: profile?.name || user?.displayName || "",
+                email: profile?.email || user?.email || "",
+                phoneNumber: profile?.phone?.replace(/^\+94/, "") || "",
+            });
+        }
+    }, [isOpen, profile, user]);
 
     const serviceFee = 12.0;
     const discount = 0;

@@ -1,6 +1,8 @@
 "use client";
 
+import { useContext, useEffect } from "react";
 import { BookingData } from "./NewBookingModal";
+import { AuthContext } from "@/app/context/AuthContext";
 
 interface GuestInfoProps {
   data: BookingData;
@@ -17,6 +19,25 @@ export default function GuestInfo({
   updateData,
   nextStep,
 }: GuestInfoProps) {
+  const { user, profile } = useContext(AuthContext);
+
+  // Auto-populate user details when component mounts
+  useEffect(() => {
+    if (profile || user) {
+      const name = profile?.name || user?.displayName || "";
+      const nameParts = name.split(" ");
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ") || "";
+      
+      updateData("guestInfo", {
+        firstName: data.guestInfo.firstName || firstName,
+        lastName: data.guestInfo.lastName || lastName,
+        email: data.guestInfo.email || profile?.email || user?.email || "",
+        phone: data.guestInfo.phone || profile?.phone?.replace(/^\+94/, "") || "",
+      });
+    }
+  }, [profile, user]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     nextStep();
