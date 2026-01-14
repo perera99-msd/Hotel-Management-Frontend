@@ -1,7 +1,6 @@
-/* */
 "use client";
 import React, { useState, useEffect } from "react";
-import { Save, Database } from "lucide-react";
+import { Save, Database, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
 import { useAuth } from "../../context/AuthContext";
 
@@ -13,6 +12,7 @@ export default function SystemTab() {
     phone: "", 
     email: "" 
   });
+  const [actionLoading, setActionLoading] = useState("");
 
   // Fetch Settings on Load
   useEffect(() => {
@@ -62,6 +62,42 @@ export default function SystemTab() {
     } catch (err) { 
         toast.error("❌ Failed to save settings."); 
     }
+  };
+
+  const downloadFile = async (endpoint: string, label: string) => {
+      if(!token) return;
+      try {
+          setActionLoading(label);
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}${endpoint}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (!res.ok) throw new Error("Download failed");
+
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          // Try to get filename from headers or default
+          const contentDisposition = res.headers.get('Content-Disposition');
+          let filename = `${label.toLowerCase().replace(' ', '-')}.json`;
+          if (contentDisposition && contentDisposition.includes('filename=')) {
+              filename = contentDisposition.split('filename=')[1].replace(/"/g, '');
+          }
+          
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+          toast.success(`${label} completed successfully!`);
+
+      } catch (err) {
+          console.error(err);
+          toast.error(`Failed to ${label.toLowerCase()}`);
+      } finally {
+          setActionLoading("");
+      }
   };
 
   return (
@@ -125,17 +161,44 @@ export default function SystemTab() {
         </div>
       </form>
 
-      {/* Data Management Section (UI Only for now) */}
+      {/* Data Management Section */}
       <div className="bg-white rounded-lg shadow p-6 space-y-4">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Data Management</h3>
-        {["Export Data", "Backup Database"].map((label) => (
-          <div key={label} className="flex items-center justify-between p-4 w-full border border-gray-300 rounded-lg">
-            <div><h4 className="text-sm font-medium text-gray-900">{label}</h4></div>
-            <button type="button" className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg flex items-center hover:bg-gray-200 transition">
-                <Database className="h-4 w-4 mr-2"/> {label}
+        
+        {/* Export Data */}
+        <div className="flex items-center justify-between p-4 w-full border border-gray-300 rounded-lg">
+            <div>
+                <h4 className="text-sm font-medium text-gray-900">Export Data</h4>
+                <p className="text-xs text-gray-500">Download a simplified export of business data.</p>
+            </div>
+            <button 
+                type="button" 
+                onClick={() => downloadFile('/api/settings/export', 'Export Data')}
+                disabled={!!actionLoading}
+                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg flex items-center hover:bg-gray-200 transition disabled:opacity-50"
+            >
+                {actionLoading === 'Export Data' ? <Loader2 className="h-4 w-4 mr-2 animate-spin"/> : <Database className="h-4 w-4 mr-2"/>}
+                Export
             </button>
-          </div>
-        ))}
+        </div>
+
+        {/* Backup Database */}
+        <div className="flex items-center justify-between p-4 w-full border border-gray-300 rounded-lg">
+             <div>
+                <h4 className="text-sm font-medium text-gray-900">Backup Database</h4>
+                <p className="text-xs text-gray-500">Download a full JSON dump of the system.</p>
+            </div>
+            <button 
+                type="button" 
+                onClick={() => downloadFile('/api/settings/backup', 'Backup Database')}
+                disabled={!!actionLoading}
+                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg flex items-center hover:bg-gray-200 transition disabled:opacity-50"
+            >
+                {actionLoading === 'Backup Database' ? <Loader2 className="h-4 w-4 mr-2 animate-spin"/> : <Database className="h-4 w-4 mr-2"/>}
+                Backup
+            </button>
+        </div>
+
       </div>
     </div>
   );

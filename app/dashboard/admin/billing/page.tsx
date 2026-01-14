@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { Plus, FileText, Loader2 } from "lucide-react";
-import { useAuth } from "@/app/context/AuthContext"; // Ensure this path is correct
+import { Plus, FileText, Loader2, X } from "lucide-react";
+import { useAuth } from "@/app/context/AuthContext";
 import BillCard, { Bill } from "../../../components/billing/BillCard";
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 import BillFilters from "../../../components/billing/BillFilters";
 import QuickActions from "../../../components/billing/QuickActions";
 import BillCreation from "../../../components/billing/BillCreation";
+import { format } from "date-fns";
 
 export default function Billing() {
   const { user } = useAuth();
@@ -19,10 +20,13 @@ export default function Billing() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
+  
   const [showBillForm, setShowBillForm] = useState(false);
+  const [showPaymentSummary, setShowPaymentSummary] = useState(false); // ✅ State for Payment Summary Modal
   const [billToView, setBillToView] = useState<Bill | null>(null);
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
   // --- 1. FETCH DATA FROM BACKEND ---
   useEffect(() => {
     const fetchData = async () => {
@@ -36,11 +40,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
           'Content-Type': 'application/json'
         };
 
-        // A. Fetch Users (Guests)
+        // A. Fetch Users
         const userRes = await fetch(`${API_URL}/api/users`, { headers });
         const userData = await userRes.json();
-        
-        // Map Users for the Dropdown
         if (Array.isArray(userData)) {
             setGuests(userData.map((u: any) => ({
                 id: u._id,
@@ -49,15 +51,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
             })));
         }
 
-        // B. Fetch Bookings (for linking bills)
+        // B. Fetch Bookings
         const bookRes = await fetch(`${API_URL}/api/bookings`, { headers });
         const bookData = await bookRes.json();
-        
-        // Map Bookings
         if (Array.isArray(bookData)) {
             setBookings(bookData.map((b: any) => ({
                 id: b._id,
-                // Handle case where guestId is populated object OR string ID
                 guestId: b.guestId?._id || b.guestId, 
                 roomNumber: b.roomId?.roomNumber || "N/A"
             })));
@@ -66,13 +65,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
         // C. Fetch Invoices
         const invRes = await fetch(`${API_URL}/api/invoices`, { headers });
         const invData = await invRes.json();
-
-        // Map Invoices to Bill interface
         if (Array.isArray(invData)) {
             const mappedBills: Bill[] = invData.map((inv: any) => ({
               id: inv._id,
               bookingId: inv.bookingId?._id || "N/A",
-              // Use populated guest data if available
               guestId: inv.bookingId?.guestId?._id || inv.guestId || "Unknown",
               guestName: inv.bookingId?.guestId?.name || "Unknown Guest", 
               items: inv.lineItems.map((item: any) => ({
@@ -105,7 +101,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
   // --- 2. FILTER LOGIC ---
   const filteredBills = useMemo(() => {
     return bills.filter((bill) => {
-      // Find guest name for search (using local guest list or bill data)
       const guest = guests.find((g) => g.id === bill.guestId);
       const guestName = (guest?.name || (bill as any).guestName || "").toLowerCase();
       
@@ -143,6 +138,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
     paid: bills.filter((b) => b.status === "paid").length,
     totalRevenue: bills.filter((b) => b.status === "paid").reduce((sum, b) => sum + b.total, 0),
     pendingAmount: bills.filter((b) => b.status === "pending").reduce((sum, b) => sum + b.total, 0),
+    totalTax: bills.filter((b) => b.status === "paid").reduce((sum, b) => sum + (b.tax || 0), 0),
+    cancelled: bills.filter((b) => b.status === "cancelled").length,
   };
 
   const getGuestForBill = (guestId: string) => {
@@ -150,6 +147,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
   }
 
   // --- 3. HANDLERS ---
+
+  // A. Create Bill
   const handleCreateBillSubmit = async (newBillData: Bill) => {
     try {
         const token = await user?.getIdToken();
@@ -176,13 +175,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
             throw new Error(err.error || "Failed to create bill");
         }
         
-        // Reload page to refresh data
         window.location.reload(); 
     } catch (err: any) {
         alert("Error creating bill: " + err.message);
     }
   };
 
+  // B. Mark Paid
   const handleMarkPaid = async (billToUpdate: Bill) => {
     try {
         const token = await user?.getIdToken();
@@ -209,6 +208,95 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
     }
   };
 
+  // C. Export Bills (CSV)
+  const handleExportBills = () => {
+    try {
+      const headers = ["Bill ID", "Guest Name", "Guest ID", "Date", "Status", "Subtotal", "Tax", "Total"];
+      const rows = filteredBills.map(b => {
+        const gName = (b as any).guestName || getGuestForBill(b.guestId).name || "Unknown";
+        return [
+          b.id,
+          gName,
+          b.guestId,
+          format(new Date(b.createdAt), "yyyy-MM-dd"),
+          b.status,
+          b.subtotal.toFixed(2),
+          b.tax.toFixed(2),
+          b.total.toFixed(2)
+        ];
+      });
+
+      const csvContent = "data:text/csv;charset=utf-8," 
+        + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `bills_export_${format(new Date(), "yyyyMMdd")}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Export failed", error);
+    }
+  };
+
+  // D. Generate Report (Print)
+  const handleGenerateReport = () => {
+    window.print();
+  };
+
+  // E. Download Single Bill (Simple HTML Receipt)
+  const handleDownloadBill = (bill: Bill) => {
+    const guest = getGuestForBill(bill.guestId);
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Bill Receipt #${bill.id}</title>
+            <style>
+              body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+              .header { text-align: center; margin-bottom: 40px; }
+              .details { margin-bottom: 20px; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+              th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+              .total { text-align: right; font-weight: bold; font-size: 1.2em; }
+              .status { text-transform: uppercase; font-weight: bold; color: ${bill.status === 'paid' ? 'green' : 'orange'}; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>Hotel Bill Receipt</h1>
+              <p>ID: ${bill.id}</p>
+              <p>Date: ${format(new Date(bill.createdAt), "PPP")}</p>
+              <p class="status">${bill.status}</p>
+            </div>
+            <div class="details">
+              <strong>Guest:</strong> ${guest.name || (bill as any).guestName}<br>
+              <strong>Email:</strong> ${guest.email}
+            </div>
+            <table>
+              <thead>
+                <tr><th>Description</th><th>Qty</th><th>Amount</th></tr>
+              </thead>
+              <tbody>
+                ${bill.items.map(i => `<tr><td>${i.description}</td><td>${i.quantity}</td><td>$${i.amount.toFixed(2)}</td></tr>`).join('')}
+              </tbody>
+            </table>
+            <div class="total">
+              <p>Subtotal: $${bill.subtotal.toFixed(2)}</p>
+              <p>Tax: $${bill.tax.toFixed(2)}</p>
+              <p>Total: $${bill.total.toFixed(2)}</p>
+            </div>
+            <script>window.print();</script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  };
+
   if (isLoading) {
       return (
           <AdminReceptionistLayout role="admin">
@@ -221,9 +309,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
   return (
     <AdminReceptionistLayout role="admin">
-      <div className="space-y-8 animate-fade-in">
-        {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
+      <div className="space-y-8 animate-fade-in print:p-0">
+        
+        {/* Header (Hidden when printing report) */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8 print:hidden">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Billing</h1>
             <p className="text-gray-600 mt-1">Manage guest bills and payments</p>
@@ -238,7 +327,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
         </div>
 
         {/* Stats Section */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-6 print:grid-cols-5 print:gap-4">
           <div className="border rounded-lg p-4 text-center shadow-sm bg-white border-gray-100">
             <div className="text-3xl font-bold text-gray-900 mb-1">{stats.total}</div>
             <div className="text-sm text-gray-600 font-medium">Total Bills</div>
@@ -261,39 +350,41 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
           </div>
         </div>
 
-        {/* Filters */}
-        <BillFilters
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          dateFilter={dateFilter}
-          setDateFilter={setDateFilter}
-          statusOptions={[
-            { value: "all", label: "All Status" },
-            { value: "pending", label: "Pending" },
-            { value: "paid", label: "Paid" },
-            { value: "cancelled", label: "Cancelled" },
-          ]}
-          dateOptions={[
-            { value: "all", label: "All Time" },
-            { value: "today", label: "Today" },
-            { value: "week", label: "This week" },
-            { value: "month", label: "This month" },
-          ]}
-          onClearFilters={() => {
-            setSearchTerm("");
-            setStatusFilter("all");
-            setDateFilter("all");
-          }}
-        />
+        {/* Filters (Hidden in print report) */}
+        <div className="print:hidden">
+            <BillFilters
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            dateFilter={dateFilter}
+            setDateFilter={setDateFilter}
+            statusOptions={[
+                { value: "all", label: "All Status" },
+                { value: "pending", label: "Pending" },
+                { value: "paid", label: "Paid" },
+                { value: "cancelled", label: "Cancelled" },
+            ]}
+            dateOptions={[
+                { value: "all", label: "All Time" },
+                { value: "today", label: "Today" },
+                { value: "week", label: "This week" },
+                { value: "month", label: "This month" },
+            ]}
+            onClearFilters={() => {
+                setSearchTerm("");
+                setStatusFilter("all");
+                setDateFilter("all");
+            }}
+            />
+        </div>
 
         {/* Create/View Modal */}
         {showBillForm && (
           <BillCreation
             onClose={() => setShowBillForm(false)}
-            guests={guests} // ✅ Correctly passing fetched guests
-            bookings={bookings} // ✅ Correctly passing fetched bookings
+            guests={guests}
+            bookings={bookings}
             initialGuestId=""
             initialBookingId=""
             initialStatus="pending"
@@ -301,6 +392,65 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
             billToView={billToView || undefined}
             onCreateBill={handleCreateBillSubmit}
           />
+        )}
+
+        {/* Payment Summary Modal */}
+        {showPaymentSummary && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 animate-fade-in relative">
+                    <button 
+                        onClick={() => setShowPaymentSummary(false)}
+                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
+                    <h2 className="text-xl font-bold text-gray-900 mb-4">Payment Summary</h2>
+                    
+                    <div className="space-y-4">
+                        <div className="p-4 bg-gray-50 rounded-lg">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-gray-600">Total Revenue Collected</span>
+                                <span className="text-xl font-bold text-green-600">${stats.totalRevenue.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-gray-600">Tax Collected</span>
+                                <span className="text-lg font-semibold text-gray-800">${stats.totalTax.toLocaleString()}</span>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-yellow-50 rounded-lg">
+                             <div className="flex justify-between items-center">
+                                <span className="text-gray-600">Outstanding (Pending)</span>
+                                <span className="text-xl font-bold text-yellow-600">${stats.pendingAmount.toLocaleString()}</span>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-4 text-center mt-4">
+                            <div className="p-2 bg-blue-50 rounded">
+                                <div className="text-xl font-bold text-blue-600">{stats.total}</div>
+                                <div className="text-xs text-gray-500">Total Bills</div>
+                            </div>
+                            <div className="p-2 bg-green-50 rounded">
+                                <div className="text-xl font-bold text-green-600">{stats.paid}</div>
+                                <div className="text-xs text-gray-500">Paid</div>
+                            </div>
+                            <div className="p-2 bg-red-50 rounded">
+                                <div className="text-xl font-bold text-red-600">{stats.cancelled}</div>
+                                <div className="text-xs text-gray-500">Cancelled</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-6 flex justify-end">
+                        <button
+                            onClick={() => setShowPaymentSummary(false)}
+                            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
         )}
 
         {/* Bills Grid */}
@@ -317,7 +467,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
                 bill={bill}
                 guest={getGuestForBill(bill.guestId)}
                 onView={(b) => { setBillToView(b); setShowBillForm(true); }}
-                onDownload={() => console.log('Download', bill)}
+                onDownload={() => handleDownloadBill(bill)} // ✅ Wired up PDF download
                 onMarkPaid={handleMarkPaid}
               />
             ))}
@@ -328,8 +478,16 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
             <h3 className="text-lg font-medium text-gray-900 mb-2">No bills found</h3>
           </div>
         )}
-
-        <QuickActions onCreateBillClick={() => { setBillToView(null); setShowBillForm(true); }} />
+        
+        {/* Quick Actions (Hidden in print) */}
+        <div className="print:hidden">
+            <QuickActions 
+                onCreateBillClick={() => { setBillToView(null); setShowBillForm(true); }}
+                onGenerateReport={handleGenerateReport} // ✅ Wired up
+                onExportBills={handleExportBills}       // ✅ Wired up
+                onPaymentSummary={() => setShowPaymentSummary(true)} // ✅ Wired up
+            />
+        </div>
       </div>
     </AdminReceptionistLayout>
   );

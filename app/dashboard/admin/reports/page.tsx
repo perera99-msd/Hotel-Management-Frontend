@@ -1,4 +1,3 @@
-/* */
 "use client";
 
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
@@ -6,7 +5,6 @@ import ChartsOverview from "../../../components/reports/ChartsOverview";
 import ExportOptions from "../../../components/reports/ExportOptions";
 import React, { useState, useEffect } from "react";
 import { TrendingUp, Users, DollarSign, Bed, Loader2 } from "lucide-react";
-// ✅ Fixed Import: Using the hook prevents 'undefined' context errors
 import { useAuth } from "../../../context/AuthContext";
 
 export default function Reports() {
@@ -36,7 +34,6 @@ export default function Reports() {
   // 1. Fetch Analytics Data
   useEffect(() => {
     const fetchAnalytics = async () => {
-      // Wait for auth to settle
       if (authLoading) return;
       
       if (!token) {

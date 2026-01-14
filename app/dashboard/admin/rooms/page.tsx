@@ -12,7 +12,7 @@ import { Grid, List, Plus, Filter } from "lucide-react";
 import { auth } from "@/app/lib/firebase"; // Import Auth
 
 type RoomStatus =
-  | "available" // Note: Frontend often uses lowercase, backend might send TitleCase. We map it below.
+  | "available" 
   | "occupied"
   | "reserved"
   | "cleaning"
@@ -20,7 +20,6 @@ type RoomStatus =
 
 type RoomType = "single" | "double" | "suite" | "family";
 
-// Matches the structure used in your UI
 export interface Room {
   id: string;
   number: string;
@@ -36,6 +35,10 @@ export default function Rooms() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
+  
+  // ✅ ADDED: State to track if the form is in View-Only mode
+  const [isViewOnly, setIsViewOnly] = useState(false);
+
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   
   // ✅ STATE: Initialize empty, fetch from backend
@@ -46,9 +49,11 @@ export default function Rooms() {
   const [showCheckInForm, setShowCheckInForm] = useState(false);
   const [checkInRoom, setCheckInRoom] = useState<Room | null>(null);
   const [checkInGuest, setCheckInGuest] = useState({
+    id: "",
     name: "",
     email: "",
     phone: "",
+    bookingHistory: [],
   });
   const [checkInErrors, setCheckInErrors] = useState<{ [key: string]: string }>({});
 
@@ -75,8 +80,6 @@ export default function Rooms() {
     try {
       setLoading(true);
       const user = auth.currentUser;
-      // If no user is logged in yet, we might wait or return. 
-      // Ideally handled by auth listener, but safe to check here.
       if (!user) return; 
 
       const token = await user.getIdToken();
@@ -88,13 +91,10 @@ export default function Rooms() {
 
       if (res.ok) {
         const data = await res.json();
-        
-        // Map Backend Data (_id, roomNumber, TitleCase Status) -> Frontend Interface
         const mappedRooms = data.map((r: any) => ({
             id: r._id,
             number: r.roomNumber, 
             type: r.type,
-            // Convert Backend "Available" -> Frontend "available" (lowercase) if needed
             status: r.status.toLowerCase(), 
             rate: r.rate,
             amenities: r.amenities,
@@ -139,13 +139,14 @@ export default function Rooms() {
       floor: 1,
     });
     setEditingRoom(null);
+    setIsViewOnly(false); // ✅ RESET view only state
     setErrors({});
   };
 
   const resetCheckInForm = () => {
     setShowCheckInForm(false);
     setCheckInRoom(null);
-    setCheckInGuest({ name: "", email: "", phone: "" });
+    setCheckInGuest({ id: "", name: "", email: "", phone: "", bookingHistory: [] });
     setCheckInErrors({});
   };
 
@@ -163,7 +164,6 @@ export default function Rooms() {
 
   const handleCheckOut = async (room: Room) => {
     if (window.confirm(`Check out guest from Room ${room.number}?`)) {
-        // Optimistic update
         handleStatusChange(room.id, "cleaning");
         toast.success(`Guest checked out from Room ${room.number}`);
     }
@@ -172,6 +172,15 @@ export default function Rooms() {
   const handleEditRoom = (room: Room) => {
     setEditingRoom(room);
     setNewRoom(room);
+    setIsViewOnly(false); // ✅ Ensure editing is allowed
+    setShowAddForm(true);
+  };
+
+  // ✅ NEW HANDLER: For viewing without editing
+  const handleViewRoom = (room: Room) => {
+    setEditingRoom(room);
+    setNewRoom(room);
+    setIsViewOnly(true); // ✅ Set to View Only mode
     setShowAddForm(true);
   };
 
@@ -183,7 +192,6 @@ export default function Rooms() {
         const token = await user.getIdToken();
         const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-        // Call Backend Delete API
         const res = await fetch(`${API_URL}/api/rooms/${room.id}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` }
@@ -203,21 +211,18 @@ export default function Rooms() {
   };
 
   const handleStatusChange = async (roomId: string, newStatus: RoomStatus) => {
-    // 1. Optimistic Update (Instant UI feedback)
     setRooms((prev) =>
       prev.map((room) =>
         room.id === roomId ? { ...room, status: newStatus } : room
       )
     );
 
-    // 2. Background API Call
     try {
         const user = auth.currentUser;
         if (!user) return;
         const token = await user.getIdToken();
         const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-        // Backend expects TitleCase for status enum (Available, Occupied...)
         const backendStatus = newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
 
         await fetch(`${API_URL}/api/rooms/${roomId}/status`, {
@@ -247,7 +252,6 @@ export default function Rooms() {
       return;
     }
     
-    // Here you would call an API to create a booking/check-in
     toast.success("Guest Checked In!");
     resetCheckInForm();
   };
@@ -333,7 +337,10 @@ export default function Rooms() {
 
             <button
               className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition group"
-              onClick={() => setShowAddForm(true)}
+              onClick={() => {
+                  setShowAddForm(true);
+                  setIsViewOnly(false);
+              }}
             >
               <Plus className="h-4 w-4 mr-2 group-hover:rotate-90 transition-transform" />
               Add Room
@@ -410,8 +417,8 @@ export default function Rooms() {
               setShowAddForm(false);
               resetRoomForm();
             }}
-            // ✅ PASSED: Refresh list after save
             onSave={handleRoomSaved}
+            readOnly={isViewOnly} // ✅ PASSED: View-Only Mode status
           />
         )}
 
@@ -420,10 +427,6 @@ export default function Rooms() {
           <CheckInForm
             room={checkInRoom}
             guest={checkInGuest}
-            setGuest={setCheckInGuest}
-            errors={checkInErrors}
-            setErrors={setCheckInErrors}
-            onClose={resetCheckInForm}
             onCheckIn={handleProcessCheckIn}
           />
         )}
@@ -456,7 +459,7 @@ export default function Rooms() {
             rooms={filteredRooms}
             viewMode={viewMode}
             onEdit={handleEditRoom}
-            onView={(room) => handleEditRoom(room)}
+            onView={handleViewRoom} // ✅ FIXED: Uses correct view handler
             onStatusChange={handleStatusChange}
             onCheckIn={handleCheckIn}
             onCheckOut={handleCheckOut}

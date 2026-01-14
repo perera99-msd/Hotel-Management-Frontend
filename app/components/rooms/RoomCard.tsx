@@ -170,7 +170,7 @@ function RoomCard({
 
   // handleStatusChange Function
   const handleStatusChange = async (rId: string, status: string) => {
-    // ✅ FIX: Delegate to parent if available
+    // Delegate to parent if available
     if (onStatusChange) {
       onStatusChange(rId, status);
       return;
@@ -203,7 +203,7 @@ function RoomCard({
 
   // handleDelete Function
   const handleDelete = async (room: Room) => {
-    // ✅ FIX: Delegate to parent if available (Stops double delete)
+    // Delegate to parent if available (Stops double delete)
     if (onDelete) {
         onDelete(room);
         return;
@@ -435,21 +435,23 @@ function RoomCard({
       {/* Actions */}
       <div className="flex justify-between items-center space-x-2">
         <div className="flex-1 flex justify-center">
-          {room.status === "available" && onCheckIn && (
-            <button onClick={() => handleCheckIn(room)} className="bg-green-100 text-green-600 p-2 rounded-lg hover:bg-green-200 flex-1 max-w-[50px] flex justify-center">
-              <LogIn className="h-4 w-4" />
-            </button>
-          )}
+          
+          {/* ✅ REMOVED: LogIn (Green Enter Icon) button */}
+          
           {room.status === "occupied" && onCheckOut && (
             <button onClick={() => handleCheckOut(room)} className="bg-yellow-100 text-yellow-600 p-2 rounded-lg hover:bg-yellow-200 flex-1 max-w-[50px] flex justify-center">
               <LogOut className="h-4 w-4" />
             </button>
           )}
+
+          {/* ✅ RESTORED: "Make Available" button */}
           {room.status === "cleaning" && onStatusChange && (
             <button onClick={() => handleStatusChange(roomId!, "available")} className="bg-green-100 text-green-600 p-2 rounded-lg hover:bg-green-200 flex-1 max-w-[50px] flex justify-center">
               <CheckCircle className="h-4 w-4" />
             </button>
           )}
+
+          {/* ✅ RESTORED: "Mark as Cleaning" button */}
           {room.status === "available" && onStatusChange && (
             <button onClick={() => handleStatusChange(roomId!, "cleaning")} className="bg-yellow-100 text-yellow-600 p-2 rounded-lg hover:bg-yellow-200 flex-1 max-w-[50px] flex justify-center">
               <AlertTriangle className="h-4 w-4" />

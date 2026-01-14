@@ -9,9 +9,17 @@ interface Action {
 
 interface QuickActionsProps {
   onCreateBillClick: () => void;
+  onGenerateReport: () => void;
+  onExportBills: () => void;
+  onPaymentSummary: () => void;
 }
 
-export default function QuickActions({ onCreateBillClick }: QuickActionsProps) {
+export default function QuickActions({ 
+  onCreateBillClick,
+  onGenerateReport,
+  onExportBills,
+  onPaymentSummary
+}: QuickActionsProps) {
   const actions: Action[] = [
     {
       label: "Create Bill",
@@ -23,19 +31,19 @@ export default function QuickActions({ onCreateBillClick }: QuickActionsProps) {
       label: "Generate Report",
       icon: FileText,
       variant: "secondary",
-      onClick: () => console.log("Report"),
+      onClick: onGenerateReport, // ✅ Wired up
     },
     {
       label: "Export Bills",
       icon: Download,
       variant: "success",
-      onClick: () => console.log("Export Bill"),
+      onClick: onExportBills, // ✅ Wired up
     },
     {
       label: "Payment Summary",
       icon: CreditCard,
       variant: "warning",
-      onClick: () => console.log("Payment"),
+      onClick: onPaymentSummary, // ✅ Wired up
     },
   ];
 

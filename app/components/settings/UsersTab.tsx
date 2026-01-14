@@ -1,7 +1,6 @@
-/* */
 "use client";
 import React, { useState, useEffect } from "react";
-import { Edit, Trash2, User as UserIcon } from "lucide-react";
+import { Edit, Trash2, User as UserIcon, Loader2 } from "lucide-react";
 import { toast } from "react-toastify";
 import AddUserForm from "../../components/settings/AddUserForm";
 import { useAuth } from "../../context/AuthContext";
@@ -35,19 +34,34 @@ export default function UsersTab() {
   useEffect(() => { fetchUsers(); }, [token]);
 
   const handleAddUser = async (newUser: any) => {
+    // 1. Prompt for password
+    const password = prompt(`Set a password for ${newUser.name}:`, "");
+    
+    if (password === null) return; // Cancelled
+    if (!password.trim()) {
+        toast.error("Password is required to create a new user.");
+        return;
+    }
+
     try {
-      const password = prompt("Set temporary password:", "password123");
-      if(!password) return;
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ ...newUser, password })
+        body: JSON.stringify({ ...newUser, password }) // Send password to backend
       });
-      if (!res.ok) throw new Error(await res.text());
-      toast.success("User added!");
+      
+      if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || "Failed to create user");
+      }
+      
+      toast.success("User created successfully!");
       fetchUsers();
       setShowForm(false);
-    } catch (err: any) { toast.error("Failed to add user"); }
+    } catch (err: any) { 
+        console.error(err);
+        toast.error(err.message || "Failed to add user"); 
+    }
   };
 
   const handleUpdateUser = async (updatedUser: any) => {
@@ -66,7 +80,7 @@ export default function UsersTab() {
   };
 
   const handleDeleteUser = async (id: string) => {
-    if (!window.confirm("Are you sure?")) return;
+    if (!window.confirm("Are you sure? This will delete the user account.")) return;
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${id}`, {
         method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
@@ -89,7 +103,9 @@ export default function UsersTab() {
         <AddUserForm key={editUser ? editUser.id : "new"} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onCancel={() => { setEditUser(null); setShowForm(false); }} existingUser={editUser} />
       )}
       <div className="card bg-white rounded-lg shadow-lg p-6 mb-6">
-        {loading ? <p>Loading users...</p> : (
+        {loading ? (
+            <div className="flex justify-center py-4"><Loader2 className="animate-spin text-blue-600"/></div>
+        ) : (
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>{["User", "Role", "Status", "Actions"].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">{h}</th>)}</tr>
@@ -101,8 +117,8 @@ export default function UsersTab() {
                 <td className="px-6 py-4 capitalize">{user.role}</td>
                 <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs ${user.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>{user.status}</span></td>
                 <td className="px-6 py-4 flex space-x-3">
-                  <button onClick={() => { setEditUser(user); setShowForm(true); }} className="text-blue-600"><Edit className="h-4 w-4" /></button>
-                  <button onClick={() => handleDeleteUser(user.id)} className="text-red-600"><Trash2 className="h-4 w-4" /></button>
+                  <button onClick={() => { setEditUser(user); setShowForm(true); }} className="text-blue-600 hover:bg-blue-50 p-1 rounded"><Edit className="h-4 w-4" /></button>
+                  <button onClick={() => handleDeleteUser(user.id)} className="text-red-600 hover:bg-red-50 p-1 rounded"><Trash2 className="h-4 w-4" /></button>
                 </td>
               </tr>
             ))}
