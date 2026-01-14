@@ -1,18 +1,56 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 import OrdersView from "../../../components/dining/OrdersView";
 import ManualOrderView from "../../../components/dining/ManualOrderView";
 import MenuManagement from "../../../components/dining/MenuManagement";
 import NewMenuItemPopup from "../../../components/dining/NewMenuItemPopup";
 import { ClipboardList, Plus, Utensils } from "lucide-react";
+import { useAuth } from "../../../context/AuthContext";
 
 type ActiveView = "orders" | "manual-order" | "menu";
 
 export default function Dining() {
   const [activeView, setActiveView] = useState<ActiveView>("orders");
   const [showNewMenuPopup, setShowNewMenuPopup] = useState(false);
+  
+  // Logic from Admin Dashboard: Fetch Real Data Counts
+  const [counts, setCounts] = useState({ orders: 0, menu: 0 });
+  const { token } = useAuth();
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
+  const fetchCounts = async () => {
+    if (!token) return;
+    try {
+      const [ordersRes, menuRes] = await Promise.all([
+        fetch(`${API_URL}/api/orders`, { 
+          headers: { 'Authorization': `Bearer ${token}` } 
+        }),
+        fetch(`${API_URL}/api/menu`, { 
+          headers: { 'Authorization': `Bearer ${token}` } 
+        })
+      ]);
+
+      if (ordersRes.ok && menuRes.ok) {
+        const ordersData = await ordersRes.json();
+        const menuData = await menuRes.json();
+        setCounts({
+          orders: ordersData.length,
+          menu: menuData.length
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch counts:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchCounts();
+    // Poll for updates every 30 seconds
+    const interval = setInterval(fetchCounts, 30000);
+    return () => clearInterval(interval);
+  }, [token, API_URL]);
 
   return (
     <AdminReceptionistLayout role="receptionist">
@@ -42,7 +80,7 @@ export default function Dining() {
           onClick={() => setActiveView("orders")}
         >
           <ClipboardList className="w-4 h-4" />
-          <span>Orders (2)</span>
+          <span>Orders ({counts.orders})</span>
         </button>
         <button
           className={`flex items-center space-x-2 pb-2 px-1 ${
@@ -64,7 +102,7 @@ export default function Dining() {
           onClick={() => setActiveView("menu")}
         >
           <Utensils className="w-4 h-4" />
-          <span>Menu (2)</span>
+          <span>Menu ({counts.menu})</span>
         </button>
       </div>
 
@@ -77,7 +115,10 @@ export default function Dining() {
       {showNewMenuPopup && (
         <NewMenuItemPopup
           isOpen={showNewMenuPopup}
-          onClose={() => setShowNewMenuPopup(false)}
+          onClose={() => {
+            setShowNewMenuPopup(false);
+            fetchCounts(); // Refresh counts when a new item is added
+          }}
         />
       )}
     </AdminReceptionistLayout>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 import NewBookingModal from "../../../components/bookings/NewBookingModal";
 import BookingCalendar from "../../../components/bookings/BookingCalendar";
@@ -13,104 +13,109 @@ import {
   LogOut,
   List,
 } from "lucide-react";
+import { auth } from "@/app/lib/firebase";
+import toast from "react-hot-toast";
 
-// Define proper TypeScript interfaces
-interface Booking {
+// Matches Backend Response Structure
+export interface Booking {
   id: string;
-  guestId: string;
-  roomId: string;
+  _id?: string;
+  guestId: {
+    _id: string;
+    name: string;
+    email: string;
+    phone: string;
+  } | string;
+  roomId: {
+    _id: string;
+    roomNumber: string;
+    type: string;
+    rate: number;
+  } | string;
   checkIn: string;
   checkOut: string;
-  status: "confirmed" | "checked-in" | "checked-out" | "cancelled";
-  source:
-    | "direct"
-    | "booking.com"
-    | "tripadvisor"
-    | "expedia"
-    | "phone"
-    | "walk-in";
-  package: "room-only" | "bed-breakfast" | "half-board" | "full-board";
+  status: 'Pending' | 'Confirmed' | 'CheckedIn' | 'CheckedOut' | 'Cancelled';
+  source: string;
   totalAmount: number;
 }
-
-interface Guest {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-}
-
-// Mock data with proper typing
-const mockBookings: Booking[] = [
-  {
-    id: "1",
-    guestId: "guest1",
-    roomId: "101",
-    checkIn: "2025-10-01",
-    checkOut: "2025-10-03",
-    status: "confirmed",
-    source: "direct",
-    package: "bed-breakfast",
-    totalAmount: 282.0,
-  },
-  {
-    id: "2",
-    guestId: "guest2",
-    roomId: "102",
-    checkIn: "2025-10-02",
-    checkOut: "2025-10-04",
-    status: "checked-in",
-    source: "booking.com",
-    package: "room-only",
-    totalAmount: 200.0,
-  },
-];
-
-const mockGuests: Guest[] = [
-  {
-    id: "guest1",
-    name: "Akila",
-    email: "Akila@example.com",
-    phone: "1234567890",
-  },
-  {
-    id: "guest2",
-    name: "Janatha",
-    email: "jane@example.com",
-    phone: "0710910202",
-  },
-];
 
 export default function Bookings() {
   const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
-  const [bookings, setBookings] = useState<Booking[]>(mockBookings);
-  const [guests] = useState<Guest[]>(mockGuests);
+  
+  // Data State
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
 
+  // --- 1. FETCH BOOKINGS ---
+  const fetchBookings = useCallback(async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      const res = await fetch(`${API_URL}/api/bookings`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        // Map _id to id for frontend compatibility
+        const mappedData = data.map((b: any) => ({
+          ...b,
+          id: b._id, 
+        }));
+        setBookings(mappedData);
+      } else {
+        console.error("Failed to load bookings");
+        toast.error("Failed to load bookings");
+      }
+    } catch (error) {
+      console.error("Fetch error:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        fetchBookings();
+      } else {
+        setLoading(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [fetchBookings]);
+
+  // --- 2. STATS CALCULATION ---
   const getBookingStats = () => {
     const today = new Date();
+    
+    // Helper to check if dates match (ignoring time)
+    const isSameDate = (d1: Date, d2: Date) => 
+      d1.getDate() === d2.getDate() && 
+      d1.getMonth() === d2.getMonth() && 
+      d1.getFullYear() === d2.getFullYear();
+
     const todayCheckIns = bookings.filter((b) => {
       const checkIn = new Date(b.checkIn);
-      return (
-        checkIn.toDateString() === today.toDateString() &&
-        b.status === "confirmed"
-      );
+      // Count if check-in is today (regardless of status, though usually Pending/Confirmed)
+      return isSameDate(checkIn, today);
     }).length;
 
     const todayCheckOuts = bookings.filter((b) => {
       const checkOut = new Date(b.checkOut);
-      return (
-        checkOut.toDateString() === today.toDateString() &&
-        b.status === "checked-in"
-      );
+      return isSameDate(checkOut, today);
     }).length;
 
     const confirmedBookings = bookings.filter(
-      (b) => b.status === "confirmed"
+      (b) => b.status === "Confirmed"
     ).length;
     const checkedInBookings = bookings.filter(
-      (b) => b.status === "checked-in"
+      (b) => b.status === "CheckedIn"
     ).length;
 
     return {
@@ -124,79 +129,98 @@ export default function Bookings() {
 
   const stats = getBookingStats();
 
+  // --- 3. HANDLERS ---
+
   // Handle edit booking - opens modal with existing booking data
   const handleEditBooking = (booking: Booking) => {
     setEditingBooking(booking);
     setIsNewBookingOpen(true);
   };
 
-  // Handle update booking - updates the booking in local state
-  const handleUpdateBooking = (updatedBooking: Booking) => {
-    setBookings((prev) =>
-      prev.map((booking) =>
-        booking.id === updatedBooking.id ? updatedBooking : booking
-      )
-    );
-    // Reset editing state and close modal
+  // Called when Modal saves successfully (Create or Update)
+  const handleUpdateSuccess = () => {
+    fetchBookings(); 
+    setIsNewBookingOpen(false);
     setEditingBooking(null);
-    setIsNewBookingOpen(false);
   };
 
-  // Handle creating new booking - adds to local state
-  const handleNewBooking = () => {
-    // In a real app, this would come from the API response
-    const newBooking: Booking = {
-      id: (bookings.length + 1).toString(),
-      guestId: `guest${bookings.length + 1}`,
-      roomId: "103",
-      checkIn: "2025-10-05",
-      checkOut: "2025-10-07",
-      status: "confirmed",
-      source: "direct",
-      package: "bed-breakfast",
-      totalAmount: 141.0,
-    };
+  // Check In Handler (API)
+  const handleCheckIn = async (booking: Booking) => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-    setBookings((prev) => [...prev, newBooking]);
-    setIsNewBookingOpen(false);
+      const res = await fetch(`${API_URL}/api/bookings/${booking.id}/checkin`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        toast.success("Guest Checked In");
+        fetchBookings();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Check-in failed");
+      }
+    } catch (e) { console.error(e); }
   };
 
-  const handleCheckIn = (booking: Booking) => {
-    console.log("Check-in booking:", booking);
-    // Update booking status to checked-in in local state
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === booking.id ? { ...b, status: "checked-in" } : b
-      )
-    );
+  // Check Out Handler (API)
+  const handleCheckOut = async (booking: Booking) => {
+    try {
+        const user = auth.currentUser;
+        if (!user) return;
+        const token = await user.getIdToken();
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  
+        const res = await fetch(`${API_URL}/api/bookings/${booking.id}/checkout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` }
+        });
+  
+        if (res.ok) {
+          toast.success("Guest Checked Out");
+          fetchBookings();
+        } else {
+          const err = await res.json();
+          toast.error(err.error || "Check-out failed");
+        }
+      } catch (e) { console.error(e); }
   };
 
-  const handleCheckOut = (booking: Booking) => {
-    console.log("Check-out booking:", booking);
-    // Update booking status to checked-out in local state
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === booking.id ? { ...b, status: "checked-out" } : b
-      )
-    );
-  };
-
-  const handleCancelBooking = (booking: Booking) => {
-    console.log("Cancel booking:", booking);
-    // Update booking status to cancelled in local state
-    setBookings((prev) =>
-      prev.map((b) => (b.id === booking.id ? { ...b, status: "cancelled" } : b))
-    );
+  // Cancel Handler (API)
+  const handleCancelBooking = async (booking: Booking) => {
+    if(!confirm("Are you sure you want to cancel this booking?")) return;
+    
+    try {
+        const user = auth.currentUser;
+        if (!user) return;
+        const token = await user.getIdToken();
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+  
+        const res = await fetch(`${API_URL}/api/bookings/${booking.id}`, {
+          method: "DELETE", 
+          headers: { Authorization: `Bearer ${token}` }
+        });
+  
+        if (res.ok) {
+          toast.success("Booking Cancelled");
+          fetchBookings();
+        } else {
+          toast.error("Cancellation failed");
+        }
+      } catch (e) { console.error(e); }
   };
 
   const handleDateClick = (date: Date) => {
+    // Optional: Could pre-fill modal with date
     console.log("Date clicked:", date);
-    // In a real app, this would open a booking form for the selected date
   };
 
   const handleBookingClick = (booking: Booking) => {
-    console.log("Booking clicked:", booking);
-    // In a real app, this would open booking details
+    handleEditBooking(booking);
   };
 
   const handleCloseModal = () => {
@@ -258,7 +282,7 @@ export default function Bookings() {
           </div>
         </div>
 
-        {/* 5 Cards Section */}
+        {/* 5 Cards Section (Preserved UI) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           {/* Card 1 - Total Bookings */}
           <div className="bg-white rounded-lg border border-gray-200 p-4 text-center">
@@ -316,9 +340,11 @@ export default function Bookings() {
           </div>
         </div>
 
-        {/* Dynamic Content based on View Mode */}
+        {/* Dynamic Content */}
         <div className="max-w-8xl mx-auto">
-          {viewMode === "calendar" ? (
+          {loading ? (
+             <div className="text-center py-12">Loading...</div>
+          ) : viewMode === "calendar" ? (
             <BookingCalendar
               bookings={bookings}
               onDateClick={handleDateClick}
@@ -338,7 +364,6 @@ export default function Bookings() {
               </div>
               <BookingList
                 bookings={bookings}
-                guests={guests}
                 onEdit={handleEditBooking}
                 onCheckIn={handleCheckIn}
                 onCheckOut={handleCheckOut}
@@ -349,12 +374,12 @@ export default function Bookings() {
         </div>
       </div>
 
-      {/* New Booking Modal */}
+      {/* New Booking Modal (Backend Integrated) */}
       <NewBookingModal
         isOpen={isNewBookingOpen}
         onClose={handleCloseModal}
         editingBooking={editingBooking}
-        onUpdateBooking={handleUpdateBooking}
+        onUpdateBooking={handleUpdateSuccess}
       />
     </AdminReceptionistLayout>
   );
