@@ -1,11 +1,11 @@
-// app/components/auth/RegisterForm.tsx
 "use client";
 
 import React, { useState } from "react";
 import { User, Mail, Phone, Lock, Eye, EyeOff } from "lucide-react";
 import toast from "react-hot-toast";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { auth } from "@/app/lib/firebase"; // Correct import path
+import { auth } from "@/app/lib/firebase"; 
+import { useRouter } from "next/navigation"; // Added for redirection if needed
 
 interface RegisterFormProps {
   onToggleMode: () => void;
@@ -22,6 +22,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -60,6 +61,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
       // 3. Sync User to MongoDB (Backend)
       const token = await user.getIdToken();
       
+      // FIX: Added 'uid' to the body because the backend requires it
       const response = await fetch('http://localhost:3000/api/users/register', {
         method: 'POST',
         headers: {
@@ -67,6 +69,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
+          uid: user.uid, // <--- CRITICAL FIX
           name: name,
           email: email,
           phone: phone
@@ -74,17 +77,22 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
       });
 
       if (!response.ok) {
-        // If backend fails, we still have the firebase user, but it's not ideal.
-        // In a strict app, you might delete the firebase user here.
-        throw new Error("Failed to save user data to backend database");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save user data to backend database");
       }
 
       toast.success("Account created successfully!");
-      onToggleMode(); // Switch back to Login view
+      
+      // Option A: Switch to Login view
+      onToggleMode(); 
+      
+      // Option B: If you want to auto-redirect to dashboard instead, uncomment below:
+      // router.push('/dashboard/customer');
 
     } catch (error: any) {
       console.error("Registration error:", error);
       const msg = error.message || "Registration failed";
+      // Clean up Firebase error messages for the user
       toast.error(msg.replace("Firebase: ", "").replace("auth/", ""));
     } finally {
       setIsLoading(false);

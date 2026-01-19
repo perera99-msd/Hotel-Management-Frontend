@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Bed,
   Users,
@@ -10,13 +10,14 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle,
-  Plus,
 } from "lucide-react";
 import AdminReceptionistLayout from "../../components/layout/AdminReceptionistLayout";
 import StatsCard from "../../components/dashboard/StatsCard";
 import ChartCard from "../../components/dashboard/ChartCard";
 import RecentActivity from "../../components/dashboard/RecentActivity";
 import QuickActions from "../../components/dashboard/QuickActions";
+import { useAuth } from "../../context/AuthContext";
+import { Loader2 } from "lucide-react";
 
 interface DashboardStats {
   totalRooms: number;
@@ -31,48 +32,113 @@ interface DashboardStats {
   revenue: number;
 }
 
-const mockDashboardStats: DashboardStats = {
-  totalRooms: 20,
-  availableRooms: 12,
-  occupiedRooms: 5,
-  cleaningRooms: 2,
-  todayCheckIns: 3,
-  todayCheckOuts: 2,
-  todayOrders: 8,
-  lowStockItems: 3,
-  occupancyRate: 75,
-  revenue: 12500,
+const initialStats: DashboardStats = {
+  totalRooms: 0,
+  availableRooms: 0,
+  occupiedRooms: 0,
+  cleaningRooms: 0,
+  todayCheckIns: 0,
+  todayCheckOuts: 0,
+  todayOrders: 0,
+  lowStockItems: 0,
+  occupancyRate: 0,
+  revenue: 0,
 };
 
 const Dashboard: React.FC = () => {
-  const stats = mockDashboardStats;
+  const { token } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats>(initialStats);
+  const [occupancyData, setOccupancyData] = useState<any[]>([]);
+  const [roomStatusData, setRoomStatusData] = useState<any[]>([]);
+  const [revenueData, setRevenueData] = useState<any[]>([]);
 
-  // Mock chart data
-  const occupancyData = [
-    { name: "Mon", value: 65 },
-    { name: "Tue", value: 70 },
-    { name: "Wed", value: 80 },
-    { name: "Thu", value: 75 },
-    { name: "Fri", value: 85 },
-    { name: "Sat", value: 90 },
-    { name: "Sun", value: 70 },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!token) return;
+      
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+        const headers = { 'Authorization': `Bearer ${token}` };
 
-  const roomStatusData = [
-    { name: "Available", value: stats.availableRooms },
-    { name: "Occupied", value: stats.occupiedRooms },
-    { name: "Cleaning", value: stats.cleaningRooms },
-    { name: "Maintenance", value: 1 },
-  ];
+        // 1. Fetch Main Dashboard Metrics (Rooms, Check-ins)
+        const dashboardRes = await fetch(`${API_URL}/api/reports/dashboard`, { headers });
+        const dashboardData = await dashboardRes.json();
 
-  const revenueData = [
-    { name: "Jan", value: 12000 },
-    { name: "Feb", value: 15000 },
-    { name: "Mar", value: 18000 },
-    { name: "Apr", value: 16000 },
-    { name: "May", value: 20000 },
-    { name: "Jun", value: 22000 },
-  ];
+        // 2. Fetch Analytics (Revenue, Trends, Daily Occupancy)
+        const analyticsRes = await fetch(`${API_URL}/api/reports/analytics`, { headers });
+        const analyticsData = await analyticsRes.json();
+
+        // 3. Fetch Sidebar Counts (Active Orders, Low Stock)
+        const sidebarRes = await fetch(`${API_URL}/api/reports/sidebar-counts`, { headers });
+        const sidebarData = await sidebarRes.json();
+
+        if (dashboardRes.ok && analyticsRes.ok && sidebarRes.ok) {
+            // -- Parse Stats --
+            const { metrics, roomStatus } = dashboardData;
+            
+            // Calculate Cleaning Rooms (Available Dirty + Occupied Dirty)
+            const cleaningCount = (roomStatus?.available?.dirty || 0) + (roomStatus?.occupied?.dirty || 0);
+            
+            setStats({
+                totalRooms: (metrics?.totalAvailableRoom || 0) + (metrics?.totalOccupiedRoom || 0) + cleaningCount + (roomStatus?.available?.inspected || 0), // Sum all states
+                availableRooms: metrics?.totalAvailableRoom || 0,
+                occupiedRooms: metrics?.totalOccupiedRoom || 0,
+                cleaningRooms: cleaningCount,
+                todayCheckIns: metrics?.todayCheckIns || 0,
+                todayCheckOuts: metrics?.todayCheckOuts || 0,
+                todayOrders: sidebarData.dining || 0,
+                lowStockItems: sidebarData.inventory || 0,
+                occupancyRate: analyticsData.metrics?.occupancyRate || 0,
+                revenue: analyticsData.metrics?.revenue || 0,
+            });
+
+            // -- Parse Charts --
+            
+            // 1. Weekly Occupancy (Last 7 Days)
+            // Backend returns dailyOccupancy array. We reverse it if needed to show chronological order.
+            const weeklyData = analyticsData.dailyOccupancy?.map((d: any) => ({
+                name: d.day,
+                value: d.occupancy
+            })) || [];
+            setOccupancyData(weeklyData.reverse()); 
+
+            // 2. Room Status Distribution
+            setRoomStatusData([
+                { name: "Available", value: metrics?.totalAvailableRoom || 0 },
+                { name: "Occupied", value: metrics?.totalOccupiedRoom || 0 },
+                { name: "Cleaning", value: cleaningCount },
+                { name: "Maintenance", value: (roomStatus?.available?.inspected || 0) },
+            ]);
+
+            // 3. Monthly Revenue Trend
+            // Backend 'occupancyData' (monthlyData) contains revenue info
+            const monthlyRevenue = analyticsData.occupancyData?.map((m: any) => ({
+                name: m.name,
+                value: m.revenue
+            })) || [];
+            setRevenueData(monthlyRevenue);
+        }
+
+      } catch (error) {
+        console.error("Failed to fetch dashboard data", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [token]);
+
+  if (loading) {
+      return (
+        <AdminReceptionistLayout role="receptionist">
+            <div className="flex h-screen items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            </div>
+        </AdminReceptionistLayout>
+      );
+  }
 
   return (
     <AdminReceptionistLayout role="receptionist">
@@ -108,8 +174,7 @@ const Dashboard: React.FC = () => {
             title="Available Rooms"
             value={stats.availableRooms}
             subtitle={`${stats.occupancyRate}% occupied`}
-            change="+5% from yesterday"
-            changeType="positive"
+            changeType="positive" // Logic for change % can be added if backend supports historical comparison
             icon={CheckCircle}
             bgColor="bg-green-500"
             textColor="text-white"
@@ -125,9 +190,7 @@ const Dashboard: React.FC = () => {
           <StatsCard
             title="Today's Orders"
             value={stats.todayOrders}
-            subtitle="Meal orders"
-            change="+3 from yesterday"
-            changeType="positive"
+            subtitle="Active Meal orders"
             icon={Utensils}
             bgColor="bg-teal-500"
             textColor="text-white"
@@ -164,8 +227,6 @@ const Dashboard: React.FC = () => {
             title="Monthly Revenue"
             value={`$${stats.revenue.toLocaleString()}`}
             subtitle="This month"
-            change="+12% from last month"
-            changeType="positive"
             icon={TrendingUp}
             bgColor="bg-green-500"
             textColor="text-white"
