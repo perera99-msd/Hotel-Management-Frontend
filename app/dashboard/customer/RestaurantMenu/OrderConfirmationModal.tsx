@@ -1,8 +1,12 @@
 // app/dashboard/customer/RestaurantMenu/OrderConfirmationModal.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useContext, useEffect } from "react";
 import { SelectedMenuItem } from "./OrderSelectionModal";
+import { AuthContext } from "@/app/context/AuthContext";
+import toast from "react-hot-toast";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 interface OrderConfirmationModalProps {
     isOpen: boolean;
@@ -17,9 +21,39 @@ export default function OrderConfirmationModal({
     selectedItems,
     onBack
 }: OrderConfirmationModalProps) {
+    const { token, user } = useContext(AuthContext);
     const [specialInstructions, setSpecialInstructions] = useState("");
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [activeRoomNumber, setActiveRoomNumber] = useState<string | null>(null);
+
+    // Auto-detect room number on open
+    useEffect(() => {
+        if (isOpen && token) {
+            const fetchActiveBooking = async () => {
+                try {
+                    const res = await fetch(`${API_URL}/api/bookings`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.ok) {
+                        const bookings = await res.json();
+                        // Find a booking that is actively checked in
+                        const active = bookings.find((b: any) => 
+                            b.status === 'CheckedIn' || b.status === 'Checked-In'
+                        );
+                        if (active && active.roomId) {
+                            // Handle populated object or string
+                            const rNum = typeof active.roomId === 'object' ? active.roomId.roomNumber : null;
+                            if (rNum) setActiveRoomNumber(rNum);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to auto-detect room number", e);
+                }
+            };
+            fetchActiveBooking();
+        }
+    }, [isOpen, token]);
 
     if (!isOpen) return null;
 
@@ -31,48 +65,45 @@ export default function OrderConfirmationModal({
     const total = subtotal + serviceFee;
 
     const handlePlaceOrder = async () => {
+        if (!token) {
+            toast.error("You must be logged in to place an order");
+            return;
+        }
+
         setLoading(true);
         try {
             const orderData = {
                 items: selectedItems.map(item => ({
-                    menuItemId: item.menuItem.id,
-                    name: item.menuItem.name,
-                    price: item.menuItem.price,
+                    menuItemId: item.menuItem._id, // Using _id correctly
+                    name: item.menuItem.name,      // Sent as fallback/metadata
+                    price: item.menuItem.price,    // Sent as fallback/metadata
                     quantity: item.quantity,
                     category: item.menuItem.category
                 })),
-                subtotal,
-                serviceFee,
-                total,
-                specialInstructions,
-                orderDate: new Date().toISOString()
+                roomNumber: activeRoomNumber, // Auto-detected room number
+                specialNotes: specialInstructions, // Mapped to backend 'specialNotes'
             };
 
-            // Add API endpoint
-            /*
-            const response = await fetch('/api/orders', {
+            const response = await fetch(`${API_URL}/api/orders`, {
               method: 'POST',
               headers: {
+                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify(orderData),
             });
       
             if (!response.ok) {
-              throw new Error('Failed to place order');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to place order');
             }
       
-            const result = await response.json();
-            */
-
-            console.log("Order data to be saved:", orderData);
-
             // Show success modal
             setShowSuccess(true);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error placing order:", error);
-            alert("Failed to place order. Please try again.");
+            toast.error(error.message || "Failed to place order");
         } finally {
             setLoading(false);
         }
@@ -92,8 +123,10 @@ export default function OrderConfirmationModal({
                     <div className="p-6 border-b border-gray-200">
                         <div className="flex justify-between items-center">
                             <div>
-                                <h2 className="text-2xl font-bold text-gray-900">Orders</h2>
-                                <p className="text-gray-600 mt-1">Selected dishes</p>
+                                <h2 className="text-2xl font-bold text-gray-900">Confirm Order</h2>
+                                <p className="text-gray-600 mt-1">
+                                    {activeRoomNumber ? `Delivering to Room ${activeRoomNumber}` : "Review your selection"}
+                                </p>
                             </div>
                             <button
                                 onClick={onClose}
@@ -108,32 +141,36 @@ export default function OrderConfirmationModal({
                         {/* Selected Items */}
                         <div className="space-y-6 mb-6">
                             {selectedItems.map(({ menuItem, quantity }) => (
-                                <div key={menuItem.id} className="border-b border-gray-200 pb-6 last:border-b-0">
+                                <div key={menuItem._id} className="border-b border-gray-200 pb-6 last:border-b-0">
                                     <div className="flex justify-between items-start mb-2">
                                         <h3 className="text-lg font-semibold text-gray-900">{menuItem.name}</h3>
                                         <div className="text-right">
-                                            <div className="text-lg font-bold text-gray-900">${menuItem.price * quantity}</div>
+                                            <div className="text-lg font-bold text-gray-900">${(menuItem.price * quantity).toFixed(2)}</div>
                                             <span className="text-sm text-gray-600 capitalize">{menuItem.category}</span>
                                         </div>
                                     </div>
 
-                                    <p className="text-gray-700 text-sm mb-3">{menuItem.description}</p>
+                                    {menuItem.description && (
+                                        <p className="text-gray-700 text-sm mb-3">{menuItem.description}</p>
+                                    )}
 
-                                    <div className="flex flex-wrap gap-1 mb-3">
-                                        {menuItem.ingredients.map((ingredient, index) => (
-                                            <span
-                                                key={index}
-                                                className="inline-flex items-center px-2 py-1 rounded text-xs bg-gray-100 text-gray-600"
-                                            >
-                                                {ingredient}
-                                            </span>
-                                        ))}
-                                    </div>
+                                    {menuItem.ingredients && menuItem.ingredients.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mb-3">
+                                            {menuItem.ingredients.map((ingredient, index) => (
+                                                <span
+                                                    key={index}
+                                                    className="inline-flex items-center px-2 py-1 rounded text-xs bg-gray-100 text-gray-600"
+                                                >
+                                                    {ingredient}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
 
                                     <div className="flex justify-between items-center">
                                         <span className="text-sm text-gray-600">Quantity: {quantity}</span>
                                         <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">
-                                            Available
+                                            {menuItem.available ? "Available" : "Pre-order"}
                                         </span>
                                     </div>
                                 </div>
@@ -147,12 +184,8 @@ export default function OrderConfirmationModal({
                                 <span className="font-medium text-gray-900">${subtotal.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Service Fee:</span>
+                                <span className="text-gray-600">Service Fee (10%):</span>
                                 <span className="font-medium text-gray-900">${serviceFee.toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Discount:</span>
-                                <span className="font-medium text-gray-900">$0</span>
                             </div>
                             <div className="border-t border-gray-200 pt-3">
                                 <div className="flex justify-between font-bold text-lg">
@@ -170,7 +203,7 @@ export default function OrderConfirmationModal({
                                 onChange={(e) => setSpecialInstructions(e.target.value)}
                                 className="w-full p-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 resize-none"
                                 rows={3}
-                                placeholder="Any special requests or dietary requirements..."
+                                placeholder="Any special requests, allergies, or delivery notes..."
                             />
                         </div>
 
@@ -224,10 +257,10 @@ export default function OrderConfirmationModal({
                                 Order Confirmed!
                             </h3>
                             <p className="text-gray-700 mb-2">
-                                Your order has been successfully confirmed.
+                                Your order has been successfully placed.
                             </p>
                             <p className="text-gray-700">
-                                Thank you for choosing Grand Hotel.
+                                Kitchen has been notified.
                             </p>
                         </div>
 

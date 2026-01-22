@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { BookingData } from "./NewBookingModal";
-import { useAuth } from "@/app/context/AuthContext"; // ✅ Changed: Use Auth Context
+import { useAuth } from "@/app/context/AuthContext";
 import toast from "react-hot-toast";
 
 interface ConfirmProps {
@@ -21,7 +21,6 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [isConfirmed, setIsConfirmed] = useState(false);
 
-  // ✅ Get the profile from context (contains the MongoDB _id)
   const { user, profile } = useAuth(); 
 
   const handleConfirm = async () => {
@@ -30,7 +29,6 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
       return;
     }
 
-    // Validation: Room ID is required
     if (!data.roomId) {
         toast.error("No specific room selected. Please go to 'Explore Rooms' to select a room.");
         return;
@@ -44,8 +42,6 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
         throw new Error("You must be logged in to book.");
       }
       
-      // ✅ Get MongoDB ID (Required by backend)
-      // fallback to user.uid or any custom id field if profile isn't fully loaded yet
       const guestId = profile?._id || (user as any).mongoId; 
 
       if (!guestId) {
@@ -55,17 +51,21 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
       const token = await user.getIdToken();
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-      // 1. Prepare Payload matching Backend (bookings.ts)
+      // 1. Prepare Payload
+      // ✅ FIX: Included adults, children, and preferences in payload
       const payload = {
         roomId: data.roomId,
-        guestId: guestId, // ✅ CRITICAL FIX: Send the ID
+        guestId: guestId,
         checkIn: data.bookingDetails.checkIn,
         checkOut: data.bookingDetails.checkOut,
         status: "Confirmed",
-        source: "Online"
+        source: "Online",
+        adults: data.bookingDetails.adults,
+        children: data.bookingDetails.children,
+        preferences: data.preferences
       };
 
-      console.log("Booking Payload:", payload); // Debugging
+      console.log("Booking Payload:", payload);
 
       // 2. Call Backend
       const response = await fetch(`${API_URL}/api/bookings`, {
@@ -85,7 +85,7 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
 
       setIsConfirmed(true);
       toast.success("Booking successful!");
-      if (onComplete) onComplete(); // Trigger parent cleanup if needed
+      if (onComplete) onComplete();
 
     } catch (err: any) {
       console.error("Booking error:", err);
@@ -96,7 +96,6 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
     }
   };
 
-  // Helper to format date
   const formatDate = (dateString: string) => {
     if (!dateString) return "Not selected";
     return new Date(dateString).toLocaleDateString();

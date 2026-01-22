@@ -3,9 +3,10 @@
 import { useState, useEffect, useContext } from "react";
 import Image from "next/image";
 import { AuthContext } from "@/app/context/AuthContext";
+import toast from "react-hot-toast";
 
 interface Package {
-    id: number;
+    id: string;
     name: string;
     description: string;
     maxParticipants: number;
@@ -34,7 +35,7 @@ export default function BookingModal({
     isOpen,
     onClose,
 }: BookingModalProps) {
-    const { user, profile } = useContext(AuthContext);
+    const { user, profile, token } = useContext(AuthContext);
     const [guests, setGuests] = useState(1);
     const [tripDate, setTripDate] = useState("");
     const [guestInfo, setGuestInfo] = useState<GuestInfo>({
@@ -44,6 +45,8 @@ export default function BookingModal({
     });
     const [loading, setLoading] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState(false);
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
     // Auto-populate user details when modal opens
     useEffect(() => {
@@ -64,7 +67,7 @@ export default function BookingModal({
     const handleGuestChange = (increment: boolean) => {
         setGuests((prev) => {
             const newGuests = increment ? prev + 1 : prev - 1;
-            return Math.max(0, Math.min(newGuests, packageItem.maxParticipants));
+            return Math.max(1, Math.min(newGuests, packageItem.maxParticipants));
         });
     };
 
@@ -77,13 +80,18 @@ export default function BookingModal({
     };
 
     const handleConfirmBooking = async () => {
+        if (!token) {
+            toast.error("Please login to book a trip");
+            return;
+        }
+
         if (!guestInfo.fullName || !guestInfo.email || !guestInfo.phoneNumber || !tripDate) {
-            alert("Please fill in all required fields");
+            toast.error("Please fill in all required fields");
             return;
         }
 
         if (guests > packageItem.maxParticipants) {
-            alert(`Maximum ${packageItem.maxParticipants} participants allowed for this package`);
+            toast.error(`Maximum ${packageItem.maxParticipants} participants allowed`);
             return;
         }
 
@@ -91,40 +99,33 @@ export default function BookingModal({
         try {
             const bookingData = {
                 packageId: packageItem.id,
-                packageName: packageItem.name,
-                guests,
+                participants: guests,
                 tripDate,
                 guestInfo: {
                     ...guestInfo,
                     phoneNumber: `+94${guestInfo.phoneNumber}`,
                 },
-                totalAmount: total,
-                subtotal,
-                serviceFee,
-                discount,
+                details: "Standard Booking Request", // Added for backend compatibility
             };
 
-            console.log("Booking data to be saved:", bookingData);
-
-            // Add API endpoint here
-            /*
-            const response = await fetch("/api/bookings", {
+            const response = await fetch(`${API_URL}/api/trips/requests`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { 
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${token}` 
+              },
               body: JSON.stringify(bookingData),
             });
       
             if (!response.ok) {
-              throw new Error("Failed to save booking");
+              const errorData = await response.json();
+              throw new Error(errorData.error || "Failed to save booking");
             }
       
-            const result = await response.json();
-            console.log("Booking saved successfully:", result);
-      */
             setShowConfirmation(true);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error creating booking:", error);
-            alert("Failed to create booking. Please try again.");
+            toast.error(error.message || "Failed to create booking");
         } finally {
             setLoading(false);
         }
@@ -135,11 +136,6 @@ export default function BookingModal({
         onClose();
         setGuests(1);
         setTripDate("");
-        setGuestInfo({
-            fullName: "",
-            email: "",
-            phoneNumber: "",
-        });
     };
 
     if (!isOpen) return null;
@@ -151,7 +147,7 @@ export default function BookingModal({
                 <div className="bg-white rounded-xl shadow-lg w-full max-w-sm overflow-hidden">
                     {/* Header */}
                     <div className="bg-[#199FDA] text-white px-5 py-3 flex justify-between items-center">
-                        <h2 className="text-base font-semibold">Trip Package</h2>
+                        <h2 className="text-base font-semibold">Confirm Booking</h2>
                         <button onClick={onClose} className="text-white text-xl font-bold">
                             ×
                         </button>
@@ -175,11 +171,11 @@ export default function BookingModal({
                                 alt={packageItem.name}
                                 width={500}
                                 height={250}
-                                className="rounded-md mb-4 w-full object-cover"
+                                className="rounded-md mb-4 w-full object-cover h-32"
                             />
                         )}
 
-                        {/* Trip Date and add Guests */}
+                        {/* Trip Date and Guests */}
                         <div className="flex items-center justify-between mb-4">
                             <input
                                 type="date"
@@ -248,10 +244,6 @@ export default function BookingModal({
                                 <span>Service Fee:</span>
                                 <span>${serviceFee.toFixed(2)}</span>
                             </div>
-                            <div className="flex justify-between">
-                                <span>Discount:</span>
-                                <span>${discount.toFixed(2)}</span>
-                            </div>
                             <div className="flex justify-between border-t pt-2 text-base font-bold">
                                 <span>Total:</span>
                                 <span className="text-green-600">${total.toFixed(2)}</span>
@@ -262,9 +254,9 @@ export default function BookingModal({
                         <button
                             onClick={handleConfirmBooking}
                             disabled={loading}
-                            className="mt-4 w-full bg-[#199FDA] text-white py-2 rounded-md hover:bg-[#138bc3] transition font-medium"
+                            className="mt-4 w-full bg-[#199FDA] text-white py-2 rounded-md hover:bg-[#138bc3] transition font-medium disabled:opacity-50"
                         >
-                            {loading ? "Processing..." : "Confirm"}
+                            {loading ? "Processing..." : "Confirm Booking"}
                         </button>
                     </div>
                 </div>
@@ -298,15 +290,14 @@ export default function BookingModal({
                             <h3 className="text-green-600 font-semibold">Booking Confirmed!</h3>
                         </div>
                         <p className="text-gray-700 text-sm">
-                            Your booking has been successfully confirmed.{" "}
-                            <span className="font-semibold">Thank you for choosing Grand Hotel.</span>
+                            Your booking request has been submitted. Our team will contact you shortly to confirm the details.
                         </p>
 
                         <button
                             onClick={handleConfirmationClose}
-                            className="mt-4 bg-green-600 text-white px-4 py-1.5 rounded-md hover:bg-green-700 transition font-medium"
+                            className="mt-4 bg-green-600 text-white px-4 py-1.5 rounded-md hover:bg-green-700 transition font-medium w-full"
                         >
-                            Got it
+                            Done
                         </button>
                     </div>
                 </div>

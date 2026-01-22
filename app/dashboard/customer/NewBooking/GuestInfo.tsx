@@ -11,7 +11,7 @@ interface GuestInfoProps {
   prevStep: () => void;
   currentStep: number;
   totalSteps: number;
-  onComplete?: () => void; // ✅ Added this
+  onComplete?: () => void;
 }
 
 export default function GuestInfo({
@@ -29,11 +29,15 @@ export default function GuestInfo({
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
       
+      // ✅ FIX: Remove +94 AND leading 0 from profile phone if present
+      let phone = profile?.phone || user?.phoneNumber || "";
+      phone = phone.replace(/^\+94/, "").replace(/^0+/, "");
+
       updateData("guestInfo", {
         firstName: data.guestInfo.firstName || firstName,
         lastName: data.guestInfo.lastName || lastName,
         email: data.guestInfo.email || profile?.email || user?.email || "",
-        phone: data.guestInfo.phone || profile?.phone?.replace(/^\+94/, "") || "",
+        phone: data.guestInfo.phone || phone,
       });
     }
   }, [profile, user]);
@@ -44,8 +48,12 @@ export default function GuestInfo({
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const digitsOnly = e.target.value.replace(/\D/g, "");
-    const limitedDigits = digitsOnly.slice(0, 9);
+    // ✅ FIX: Remove non-digits AND leading zero immediately
+    let val = e.target.value.replace(/\D/g, "");
+    if (val.startsWith("0")) {
+      val = val.substring(1);
+    }
+    const limitedDigits = val.slice(0, 9);
     updateData("guestInfo", { phone: limitedDigits });
   };
 
@@ -114,12 +122,13 @@ export default function GuestInfo({
               value={data.guestInfo.phone}
               onChange={handlePhoneChange}
               pattern="[0-9]{9}"
-              title="Please enter exactly 9 digits"
+              title="Please enter exactly 9 digits (exclude the leading 0)"
               maxLength={9}
               className="flex-1 px-4 py-3 text-sm border border-gray-300 rounded-r-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-black"
               placeholder="710 875 581"
             />
           </div>
+          <p className="text-xs text-gray-500 mt-1">Do not enter the leading 0</p>
         </div>
 
         <div className="flex justify-end pt-4">

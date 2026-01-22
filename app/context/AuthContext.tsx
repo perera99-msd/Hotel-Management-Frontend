@@ -1,7 +1,7 @@
 // app/context/AuthContext.tsx
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "@/app/lib/firebase";
 import { useRouter, usePathname } from "next/navigation";
@@ -24,15 +24,16 @@ interface AuthContextType {
   loading: boolean;
   role: string | null;
   token: string | null;
+  refreshProfile: () => Promise<void>; // Added function to sync data manually
 }
 
-// ✅ FIX: Export the Context explicitly
 export const AuthContext = createContext<AuthContextType>({ 
   user: null, 
   profile: null,
   loading: true, 
   role: null,
-  token: null 
+  token: null,
+  refreshProfile: async () => {} 
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -46,32 +47,37 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
+  // Function to fetch profile data from backend
+  const fetchProfileData = useCallback(async (currentUser: User) => {
+    try {
+      const idToken = await currentUser.getIdToken();
+      setToken(idToken);
+
+      const res = await fetch(`${API_URL}/api/users/me`, {
+          headers: { 
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+          }
+      });
+
+      if (res.ok) {
+          const data: UserProfile = await res.json();
+          setProfile(data);
+          setRole(data.roles?.[0] || 'customer');
+      } else {
+          setRole('customer');
+      }
+    } catch (error) {
+      console.error("Failed to connect to backend", error);
+      setRole('customer');
+    }
+  }, [API_URL]);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
-        try {
-            const idToken = await firebaseUser.getIdToken();
-            setToken(idToken);
-
-            const res = await fetch(`${API_URL}/api/users/me`, {
-                headers: { 
-                  'Authorization': `Bearer ${idToken}`,
-                  'Content-Type': 'application/json'
-                }
-            });
-
-            if (res.ok) {
-                const data: UserProfile = await res.json();
-                setProfile(data);
-                setRole(data.roles?.[0] || 'customer');
-            } else {
-                setRole('customer');
-            }
-        } catch (error) {
-            console.error("Failed to connect to backend", error);
-            setRole('customer');
-        }
+        await fetchProfileData(firebaseUser);
       } else {
         setUser(null);
         setProfile(null);
@@ -82,7 +88,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     return () => unsubscribe();
-  }, [API_URL]);
+  }, [fetchProfileData]);
+
+  // Exposed function to allow components to trigger a profile refresh
+  const refreshProfile = async () => {
+    if (user) {
+      await fetchProfileData(user);
+    }
+  };
 
   // Route Protection
   useEffect(() => {
@@ -116,7 +129,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, role, token }}>
+    <AuthContext.Provider value={{ user, profile, loading, role, token, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

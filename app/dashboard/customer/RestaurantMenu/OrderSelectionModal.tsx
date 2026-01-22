@@ -3,8 +3,9 @@
 
 import { useState } from "react";
 
-interface MenuItem {
-    id: string;
+// Updated to match MongoDB _id structure
+export interface MenuItem {
+    _id: string; // Changed from id to _id
     name: string;
     category: string;
     description: string;
@@ -25,8 +26,8 @@ interface OrderSelectionModalProps {
 export interface SelectedMenuItem {
     menuItem: MenuItem;
     quantity: number;
-    specialInstructions?: string; // Add this
-    dietaryRestrictions?: string[]; // Add this
+    specialInstructions?: string;
+    dietaryRestrictions?: string[];
 }
 
 export default function OrderSelectionModal({
@@ -54,9 +55,9 @@ export default function OrderSelectionModal({
 
     const toggleItemSelection = (item: MenuItem) => {
         setSelectedItems(prev => {
-            const existingItem = prev.find(selected => selected.menuItem.id === item.id);
+            const existingItem = prev.find(selected => selected.menuItem._id === item._id);
             if (existingItem) {
-                return prev.filter(selected => selected.menuItem.id !== item.id);
+                return prev.filter(selected => selected.menuItem._id !== item._id);
             } else {
                 return [...prev, { menuItem: item, quantity: 1 }];
             }
@@ -68,7 +69,7 @@ export default function OrderSelectionModal({
 
         setSelectedItems(prev =>
             prev.map(selected =>
-                selected.menuItem.id === itemId
+                selected.menuItem._id === itemId
                     ? { ...selected, quantity: newQuantity }
                     : selected
             )
@@ -87,7 +88,7 @@ export default function OrderSelectionModal({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="p-6 border-b border-gray-200">
                     <div className="flex justify-between items-center">
@@ -109,11 +110,11 @@ export default function OrderSelectionModal({
                     </div>
                 </div>
 
-                <div className="flex">
+                <div className="flex flex-1 overflow-hidden">
                     {/* Left Side - Menu Items */}
-                    <div className="flex-1 p-6 border-r border-gray-200 max-h-[70vh] overflow-y-auto">
+                    <div className="flex-1 p-6 border-r border-gray-200 overflow-y-auto">
                         {/* Category Filter */}
-                        <div className="mb-6">
+                        <div className="mb-6 sticky top-0 bg-white pt-2 pb-4 z-10">
                             <div className="flex flex-wrap gap-2">
                                 {categories.map((category) => (
                                     <button
@@ -133,12 +134,12 @@ export default function OrderSelectionModal({
                         {/* Menu Items List */}
                         <div className="space-y-6">
                             {filteredItems.map((item) => {
-                                const isSelected = selectedItems.some(selected => selected.menuItem.id === item.id);
-                                const selectedItem = selectedItems.find(selected => selected.menuItem.id === item.id);
+                                const isSelected = selectedItems.some(selected => selected.menuItem._id === item._id);
+                                const selectedItem = selectedItems.find(selected => selected.menuItem._id === item._id);
 
                                 return (
                                     <div
-                                        key={item.id}
+                                        key={item._id}
                                         className={`border rounded-lg p-4 cursor-pointer transition-all ${isSelected ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"
                                             }`}
                                         onClick={() => toggleItemSelection(item)}
@@ -179,14 +180,14 @@ export default function OrderSelectionModal({
                                             {isSelected && (
                                                 <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
                                                     <button
-                                                        onClick={() => updateQuantity(item.id, (selectedItem?.quantity || 1) - 1)}
+                                                        onClick={() => updateQuantity(item._id, (selectedItem?.quantity || 1) - 1)}
                                                         className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 text-black font-bold"
                                                     >
                                                         -
                                                     </button>
                                                     <span className="text-sm font-medium text-black">{selectedItem?.quantity || 1}</span>
                                                     <button
-                                                        onClick={() => updateQuantity(item.id, (selectedItem?.quantity || 1) + 1)}
+                                                        onClick={() => updateQuantity(item._id, (selectedItem?.quantity || 1) + 1)}
                                                         className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 text-black font-bold"
                                                     >
                                                         +
@@ -201,7 +202,7 @@ export default function OrderSelectionModal({
                     </div>
 
                     {/* Right Side - Selected Items Summary */}
-                    <div className="w-80 p-6 bg-gray-50 max-h-[70vh] overflow-y-auto">
+                    <div className="w-80 p-6 bg-gray-50 overflow-y-auto">
                         <h3 className="text-lg font-semibold text-gray-900 mb-4">Selected Items</h3>
 
                         {selectedItems.length === 0 ? (
@@ -209,7 +210,7 @@ export default function OrderSelectionModal({
                         ) : (
                             <div className="space-y-4">
                                 {selectedItems.map(({ menuItem, quantity }) => (
-                                    <div key={menuItem.id} className="bg-white rounded-lg p-3 border border-gray-200">
+                                    <div key={menuItem._id} className="bg-white rounded-lg p-3 border border-gray-200">
                                         <div className="flex justify-between items-start mb-2">
                                             <h4 className="font-medium text-gray-900">{menuItem.name}</h4>
                                             <span className="text-gray-900 font-medium">${menuItem.price * quantity}</span>
@@ -226,7 +227,7 @@ export default function OrderSelectionModal({
                         {selectedItems.length > 0 && (
                             <button
                                 onClick={handleProceed}
-                                className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium mt-6"
+                                className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium mt-6 sticky bottom-0"
                             >
                                 Proceed to Order ({totalItems})
                             </button>

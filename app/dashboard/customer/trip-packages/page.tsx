@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import CustomerLayout from "../../../components/layout/CustomerLayout";
 import BookingModal from "./BookingModal";
 import CustomTripModal from "./CustomTripModal";
+import { AuthContext } from "@/app/context/AuthContext";
+import { Loader2 } from "lucide-react";
 
 interface Package {
-    id: number;
+    id: string; // Changed to string to match MongoDB _id
+    _id?: string;
     name: string;
     description: string;
     maxParticipants: number;
@@ -19,65 +22,38 @@ interface Package {
 }
 
 export default function CustomerTripPackages() {
+    const { token } = useContext(AuthContext);
     const [packages, setPackages] = useState<Package[]>([]);
     const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [isCustomTripModalOpen, setIsCustomTripModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
 
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
     useEffect(() => {
         fetchPackages();
-    }, []);
+    }, [token]);
 
     const fetchPackages = async () => {
+        if (!token) return;
         try {
-            // ADD API endpoint
-            /*
-            const response = await fetch("/api/trip-packages");
-            const data = await response.json();
-            setPackages(data);
-            */
-
-            // Temporary data (same in TripPackagesView() UI )
-            const staticPackages = [
-                {
-                    id: 1,
-                    name: "City Heritage Tour",
-                    description: "Explore the rich history and culture of our beautiful city with a guided tour through historic landmarks, museums, and local markets.",
-                    maxParticipants: 15,
-                    price: 75,
-                    duration: "1 day",
-                    vehicle: "Comfort Bus",
-                    status: "Active",
-                    location: "Historic City Center",
-                    image: "/images/city-tour.jpg"
-                },
-                {
-                    id: 2,
-                    name: "Mountain Adventure",
-                    description: "Experience breathtaking mountain views and fresh air with our guided hiking tour through scenic trails and natural wonders.",
-                    maxParticipants: 8,
-                    price: 120,
-                    duration: "2 days",
-                    vehicle: "Adventure Van",
-                    status: "Active",
-                    location: "Blue Mountain Range",
-                    image: "/images/mountain-adventure.jpg"
-                },
-                {
-                    id: 3,
-                    name: "Coastal Paradise",
-                    description: "Relax and comfort at pristine beaches with crystal clear waters, perfect for swimming, snorkeling, and beach activities.",
-                    maxParticipants: 12,
-                    price: 90,
-                    duration: "1 day",
-                    vehicle: "Luxury Sedan",
-                    status: "Active",
-                    location: "Golden Coast",
-                    image: "/images/coastal-paradise.jpg"
-                },
-            ];
-            setPackages(staticPackages);
+            setLoading(true);
+            const response = await fetch(`${API_URL}/api/trips`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                // Map _id to id if necessary, filter only Active packages for customers
+                const mappedPackages = data
+                    .filter((p: any) => p.status === 'Active')
+                    .map((p: any) => ({
+                        ...p,
+                        id: p._id || p.id
+                    }));
+                setPackages(mappedPackages);
+            }
         } catch (error) {
             console.error("Error fetching packages:", error);
         } finally {
@@ -91,23 +67,23 @@ export default function CustomerTripPackages() {
     };
 
     const handleCustomTripCreated = (tripData: any) => {
-        console.log("Custom trip created:", tripData);
-        // You can add additional logic here, like showing a success message
-        // or redirecting to a confirmation page
-        alert("Your custom trip request has been submitted! Our travel experts will contact you soon.");
+        // Refresh or show feedback if needed
+        console.log("Custom trip created");
     };
 
     if (loading) {
         return (
             <CustomerLayout>
-                <div className="text-center py-8">Loading packages...</div>
+                 <div className="flex items-center justify-center h-screen">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                </div>
             </CustomerLayout>
         );
     }
 
     return (
         <CustomerLayout>
-            <div className="space-y-6">
+            <div className="space-y-6 p-6">
                 {/* Header Section */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
@@ -141,13 +117,18 @@ export default function CustomerTripPackages() {
                 </div>
 
                 {/* Packages Grid */}
+                {packages.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 bg-white rounded-lg border border-gray-200">
+                        No active trip packages available at the moment.
+                    </div>
+                ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {packages.map((packageItem) => (
                         <div
                             key={packageItem.id}
                             className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 hover:shadow-lg transition-shadow"
                         >
-                            {/* Package Image */}
+                            {/* Package Image Placeholder */}
                             <div className="h-48 bg-gray-200 relative">
                                 {packageItem.image ? (
                                     <img
@@ -157,7 +138,7 @@ export default function CustomerTripPackages() {
                                     />
                                 ) : (
                                     <div className="w-full h-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
-                                        <span className="text-white font-semibold">Package Image</span>
+                                        <span className="text-white font-semibold text-lg">{packageItem.name}</span>
                                     </div>
                                 )}
                             </div>
@@ -191,13 +172,10 @@ export default function CustomerTripPackages() {
                                             </p>
                                         </div>
                                     </div>
-                                    <span className="bg-green-100 text-green-700 text-xs font-medium px-3 py-1 rounded-full flex-shrink-0 ml-2">
-                                        {packageItem.status}
-                                    </span>
                                 </div>
 
                                 {/* Description */}
-                                <p className="text-gray-700 mb-4 text-sm leading-relaxed line-clamp-3">
+                                <p className="text-gray-700 mb-4 text-sm leading-relaxed line-clamp-3 h-16">
                                     {packageItem.description}
                                 </p>
 
@@ -260,7 +238,7 @@ export default function CustomerTripPackages() {
 
                                 {/* Price */}
                                 <div className="text-blue-600 font-bold text-xl mb-4">
-                                    ${packageItem.price}
+                                    ${packageItem.price} <span className="text-sm font-normal text-gray-500">/ person</span>
                                 </div>
 
                                 {/* Book Now button */}
@@ -274,6 +252,7 @@ export default function CustomerTripPackages() {
                         </div>
                     ))}
                 </div>
+                )}
 
                 {/* Booking Modal */}
                 {selectedPackage && (
