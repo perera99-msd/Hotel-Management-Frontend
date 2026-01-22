@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useContext } from "react";
+import { AuthContext } from "@/app/context/AuthContext";
+import toast from "react-hot-toast";
 
 interface CustomTripModalProps {
     isOpen: boolean;
@@ -13,6 +15,7 @@ export default function CustomTripModal({
     onClose,
     onTripCreated,
 }: CustomTripModalProps) {
+    const { token } = useContext(AuthContext);
     const [tripData, setTripData] = useState({
         destination: "",
         duration: "",
@@ -30,7 +33,8 @@ export default function CustomTripModal({
     const [currentStep, setCurrentStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [showSuccessPopup, setShowSuccessPopup] = useState(false);
-    const [showErrorPopup, setShowErrorPopup] = useState(false);
+    
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
     const preferenceOptions = [
         "Adventure",
@@ -45,7 +49,7 @@ export default function CustomTripModal({
         "City Tour",
     ];
 
-    const participantOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+    const participantOptions = Array.from({length: 20}, (_, i) => i + 1);
     const accommodationOptions = ["Luxury", "Standard", "Budget", "Hostel", "Vacation Rental"];
     const transportationOptions = ["Private Car", "Rental Car", "Public Transport", "Tour Bus", "Mixed"];
 
@@ -85,57 +89,53 @@ export default function CustomTripModal({
     };
 
     const handleSubmit = async () => {
+        if (!token) {
+            toast.error("Please login to submit a request");
+            return;
+        }
+
         setLoading(true);
         try {
-            console.log("Custom trip request data to be saved:", tripData);
+            // Format details as a readable string for the backend 'details' field
+            const formattedDetails = `
+**Custom Trip Request Details**
+- **Destination:** ${tripData.destination}
+- **Duration:** ${tripData.startDate} to ${tripData.endDate}
+- **Budget:** $${tripData.budget || 'N/A'}
+- **Preferences:** ${tripData.preferences.join(', ') || 'None'}
+- **Accommodation:** ${tripData.accommodation}
+- **Transportation:** ${tripData.transportation}
+- **Special Requirements:** ${tripData.specialRequirements || 'None'}
+- **Activities:** ${tripData.activities || 'None'}
+            `.trim();
 
-            // Add API endpoint
-            /*
-            const response = await fetch('/api/custom-trips', {
+            const payload = {
+                location: tripData.destination,
+                tripDate: tripData.startDate,
+                participants: Number(tripData.participants),
+                details: formattedDetails
+            };
+
+            const response = await fetch(`${API_URL}/api/trips/requests`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify(tripData),
+                body: JSON.stringify(payload),
             });
 
             if (!response.ok) {
-                throw new Error('Failed to submit custom trip request');
+                const err = await response.json();
+                throw new Error(err.error || 'Failed to submit custom trip request');
             }
 
-            const result = await response.json();
-            console.log("Custom trip saved successfully:", result);
-            */
-
-            // Simulate API call delay
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            // Call the callback if provided
             onTripCreated?.(tripData);
-
-            // Reset form and close modal
-            setTripData({
-                destination: "",
-                duration: "",
-                participants: 1,
-                budget: "",
-                startDate: "",
-                endDate: "",
-                preferences: [],
-                specialRequirements: "",
-                accommodation: "",
-                transportation: "",
-                activities: "",
-            });
-            setCurrentStep(1);
-            
-            // Show success popup
             setShowSuccessPopup(true);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error creating custom trip:", error);
-            // Show error popup
-            setShowErrorPopup(true);
+            toast.error(error.message || "Failed to submit request");
         } finally {
             setLoading(false);
         }
@@ -144,10 +144,21 @@ export default function CustomTripModal({
     const closeSuccessPopup = () => {
         setShowSuccessPopup(false);
         onClose();
-    };
-
-    const closeErrorPopup = () => {
-        setShowErrorPopup(false);
+        // Reset form
+        setTripData({
+            destination: "",
+            duration: "",
+            participants: 1,
+            budget: "",
+            startDate: "",
+            endDate: "",
+            preferences: [],
+            specialRequirements: "",
+            accommodation: "",
+            transportation: "",
+            activities: "",
+        });
+        setCurrentStep(1);
     };
 
     const isStepValid = () => {
@@ -177,40 +188,15 @@ export default function CustomTripModal({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                             </div>
-                            <h3 className="text-xl font-semibold text-gray-900 mb-2">Success!</h3>
+                            <h3 className="text-xl font-semibold text-gray-900 mb-2">Request Submitted!</h3>
                             <p className="text-gray-600 mb-6">
-                                Custom trip request submitted successfully! Our team will contact you within 24 hours to discuss details and provide a customized itinerary.
+                                Your custom trip request has been received. Our travel experts will review your preferences and contact you within 24 hours with a personalized itinerary.
                             </p>
                             <button
                                 onClick={closeSuccessPopup}
                                 className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
                             >
                                 Continue
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Error Popup */}
-            {showErrorPopup && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
-                        <div className="text-center">
-                            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </div>
-                            <h3 className="text-xl font-semibold text-gray-900 mb-2">Error</h3>
-                            <p className="text-gray-600 mb-6">
-                                Failed to create custom trip request. Please try again. If the problem persists, contact our support team.
-                            </p>
-                            <button
-                                onClick={closeErrorPopup}
-                                className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                            >
-                                Try Again
                             </button>
                         </div>
                     </div>
@@ -339,7 +325,6 @@ export default function CustomTripModal({
                                             className="w-full p-3 pl-8 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black placeholder-gray-500"
                                         />
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-1">Numbers only (e.g., 1500)</p>
                                 </div>
                             </div>
                         )}
@@ -368,9 +353,6 @@ export default function CustomTripModal({
                                             </button>
                                         ))}
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-2">
-                                        Selected: {tripData.preferences.length} {tripData.preferences.length === 1 ? 'preference' : 'preferences'}
-                                    </p>
                                 </div>
 
                                 <div>
@@ -484,43 +466,11 @@ export default function CustomTripModal({
                                             </p>
                                         </div>
                                     </div>
-
-                                    <div className="border-t pt-2">
-                                        <span className="font-medium text-black">Preferences:</span>
-                                        <p className="text-black font-semibold mt-1 text-sm">
-                                            {tripData.preferences.join(", ") || "None selected"}
-                                        </p>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-2">
-                                        <div>
-                                            <span className="font-medium text-black">Accommodation:</span>
-                                            <p className="text-black font-semibold">{tripData.accommodation}</p>
-                                        </div>
-                                        <div>
-                                            <span className="font-medium text-black">Transportation:</span>
-                                            <p className="text-black font-semibold">{tripData.transportation}</p>
-                                        </div>
-                                    </div>
-
-                                    {tripData.specialRequirements && (
-                                        <div className="border-t pt-2">
-                                            <span className="font-medium text-black">Special Requirements:</span>
-                                            <p className="text-black font-semibold mt-1 text-sm">{tripData.specialRequirements}</p>
-                                        </div>
-                                    )}
-
-                                    {tripData.activities && (
-                                        <div className="border-t pt-2">
-                                            <span className="font-medium text-black">Specific Activities:</span>
-                                            <p className="text-black font-semibold mt-1 text-sm">{tripData.activities}</p>
-                                        </div>
-                                    )}
                                 </div>
 
                                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                                     <p className="text-xs text-blue-800">
-                                        <strong className="text-blue-900">Note:</strong> Our travel experts will review your custom trip request and contact you within 24 hours to discuss details and provide a customized itinerary and pricing.
+                                        <strong className="text-blue-900">Note:</strong> Your request will be reviewed by our team.
                                     </p>
                                 </div>
                             </div>
@@ -537,23 +487,21 @@ export default function CustomTripModal({
                         </button>
 
                         <div className="flex items-center space-x-3">
-                            {currentStep < 4 && (
+                            {currentStep < 4 ? (
                                 <button
                                     onClick={handleNextStep}
                                     disabled={!isStepValid()}
-                                    className="px-8 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]"
+                                    className="px-8 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Next
                                 </button>
-                            )}
-
-                            {currentStep === 4 && (
+                            ) : (
                                 <button
                                     onClick={handleSubmit}
                                     disabled={loading}
-                                    className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed min-w-[180px]"
+                                    className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50"
                                 >
-                                    {loading ? "Submitting..." : "Submit Custom Trip Request"}
+                                    {loading ? "Submitting..." : "Submit Request"}
                                 </button>
                             )}
                         </div>

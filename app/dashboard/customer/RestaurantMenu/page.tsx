@@ -3,27 +3,13 @@
 
 import { useState, useEffect, useContext } from "react";
 import CustomerLayout from "../../../components/layout/CustomerLayout";
-import OrderSelectionModal from "./OrderSelectionModal";
+import OrderSelectionModal, { SelectedMenuItem, MenuItem } from "./OrderSelectionModal";
 import OrderConfirmationModal from "./OrderConfirmationModal";
-import CustomOrderModal from "./CustomOrderModal"; // Add this import
-import { SelectedMenuItem } from "./OrderSelectionModal";
+import CustomOrderModal from "./CustomOrderModal"; 
 import { AuthContext } from "@/app/context/AuthContext";
 import toast from "react-hot-toast";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-
-// Define the menu item interface based on NewMenuItemPopup()
-interface MenuItem {
-  _id: string;
-  name: string;
-  category: string;
-  description: string;
-  ingredients: string[];
-  price: number;
-  discount?: number;
-  available: boolean;
-  image?: string;
-}
 
 export default function RestaurantMenuPage() {
   const { token } = useContext(AuthContext);
@@ -32,7 +18,7 @@ export default function RestaurantMenuPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-  const [isCustomOrderModalOpen, setIsCustomOrderModalOpen] = useState(false); // Add this state
+  const [isCustomOrderModalOpen, setIsCustomOrderModalOpen] = useState(false); 
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
   const [selectedOrderItems, setSelectedOrderItems] = useState<SelectedMenuItem[]>([]);
 
@@ -104,11 +90,13 @@ export default function RestaurantMenuPage() {
     specialInstructions: string;
     estimatedPrice?: number;
     dietaryRestrictions: string[];
+    mealType?: string;
   }) => {
     // Create a custom menu item for the order
+    // Note: ID starts with 'custom-' which backend handles specifically now
     const customMenuItem: MenuItem = {
       _id: `custom-${Date.now()}`,
-      name: "Custom Order",
+      name: customOrderDetails.mealType ? `Custom ${customOrderDetails.mealType}` : "Custom Order",
       category: "Custom",
       description: customOrderDetails.description,
       ingredients: ["Custom Ingredients"],
