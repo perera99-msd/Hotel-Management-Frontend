@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react"; // Added for dropdown state
-import { Bell, LogOut, Menu, X, Check } from "lucide-react"; // Added X and Check icons
+import { Bell, LogOut, Menu, X, Check, Trash2 } from "lucide-react"; // Added X and Check icons
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/app/lib/firebase";
@@ -22,7 +22,7 @@ export default function Header({
   const { profile, user } = useAuth();
   
   // --- Notification Logic Start ---
-  const { notifications, unreadCount, markAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, deleteNotification, clearOldNotifications } = useNotifications();
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   // --- Notification Logic End ---
 
@@ -67,6 +67,8 @@ export default function Header({
     dashboardType === "customer"
       ? "bg-white border-b border-gray-200 px-6 py-4"
       : "bg-white border-b border-gray-200 px-6 py-4 lg:py-6";
+
+  const isStaffDashboard = dashboardType !== "customer";
 
   return (
     <header className={wrapperClasses}>
@@ -169,13 +171,22 @@ export default function Header({
                                   <p className={`text-sm ${!notif.read ? 'font-semibold text-gray-800' : 'font-medium text-gray-600'}`}>
                                     {notif.title}
                                   </p>
-                                  <span className="text-[10px] text-gray-400 whitespace-nowrap ml-2">
-                                    {/* Format timestamp safely */}
-                                    {notif.createdAt?.seconds 
-                                        ? new Date(notif.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute:'2-digit' })
-                                        : 'Just now'
-                                    }
-                                  </span>
+                                  <div className="flex items-center gap-2 ml-2">
+                                    <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                                      {/* Format timestamp safely */}
+                                      {notif.createdAt?.seconds 
+                                          ? new Date(notif.createdAt.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute:'2-digit' })
+                                          : 'Just now'
+                                      }
+                                    </span>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); deleteNotification(notif.id); }}
+                                      className="text-gray-300 hover:text-gray-500 transition-colors"
+                                      title="Delete notification"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
                               </div>
                               <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
                                 {notif.message}
@@ -188,13 +199,24 @@ export default function Header({
                   
                   {/* Footer */}
                   {notifications.length > 0 && (
-                      <div className="bg-gray-50 px-4 py-2 text-center border-t border-gray-100">
-                          <button 
-                            onClick={() => notifications.forEach(n => markAsRead(n.id))}
-                            className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center justify-center gap-1 w-full"
-                          >
-                              <Check size={12} /> Mark all as read
-                          </button>
+                      <div className="bg-gray-50 px-4 py-2 border-t border-gray-100">
+                          <div className="flex items-center justify-between gap-2">
+                            <button 
+                              onClick={() => notifications.forEach(n => markAsRead(n.id))}
+                              className="text-xs font-medium text-blue-600 hover:text-blue-700 flex items-center justify-center gap-1"
+                            >
+                                <Check size={12} /> Mark all as read
+                            </button>
+                            {isStaffDashboard && (
+                              <button
+                                onClick={() => clearOldNotifications(30)}
+                                className="text-xs font-medium text-gray-500 hover:text-red-600 flex items-center justify-center gap-1"
+                                title="Remove notifications older than 30 days"
+                              >
+                                <Trash2 size={12} /> Clear old
+                              </button>
+                            )}
+                          </div>
                       </div>
                   )}
                 </div>

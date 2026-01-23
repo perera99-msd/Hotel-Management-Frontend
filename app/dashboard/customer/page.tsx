@@ -27,6 +27,31 @@ interface Booking {
   totalAmount?: number; // Optional to handle cases where it's missing
 }
 
+interface OrderItem {
+  menuItemId: string;
+  name: string;
+  quantity: number;
+}
+
+interface Order {
+  _id: string;
+  status: string;
+  items: OrderItem[];
+  totalAmount: number;
+  roomNumber?: string;
+  createdAt: string;
+}
+
+interface TripRequest {
+  _id: string;
+  packageName?: string;
+  location?: string;
+  status: string;
+  tripDate?: string;
+  participants?: number;
+}
+
+          {/* Active Orders */}
 // Helper functions
 const getBookingStatus = (status: string) => {
   const normalized = status.toLowerCase();
@@ -83,6 +108,8 @@ const getRoomTypeIcon = (type: string) => {
 export default function CustomerDashboard() {
   const { user, profile, token } = useContext(AuthContext);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [tripRequests, setTripRequests] = useState<TripRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -91,7 +118,7 @@ export default function CustomerDashboard() {
     
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/bookings`, {
+      const response = await fetch(`${API_URL}/api/users/dashboard`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -100,15 +127,25 @@ export default function CustomerDashboard() {
 
       if (response.ok) {
         const data = await response.json();
-        setBookings(data);
+        setBookings(data.bookings || []);
+        setOrders(data.orders || []);
+        setTripRequests(data.tripRequests || []);
       } else {
-        console.error("Failed to fetch bookings");
+        console.error("Failed to fetch dashboard data");
       }
     } catch (error) {
-      console.error("Error fetching bookings:", error);
+      console.error("Error fetching dashboard data:", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchOrders = async () => {
+    // This function is now handled by fetchBookings
+  };
+
+  const fetchTrips = async () => {
+    // This function is now handled by fetchBookings
   };
 
   useEffect(() => {
@@ -147,6 +184,9 @@ export default function CustomerDashboard() {
       },
     });
   };
+
+  const activeOrders = orders.filter((o) => o.status !== 'Cancelled' && o.status !== 'Completed');
+  const activeTrips = tripRequests.filter((t) => t.status !== 'Cancelled' && t.status !== 'Rejected');
 
   if (loading) {
     return (
@@ -292,6 +332,113 @@ export default function CustomerDashboard() {
               )}
             </div>
           </div>
+
+          {/* Active Orders Section */}
+          {activeOrders.length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Active Orders
+              </h3>
+              <div className="space-y-3">
+                {activeOrders.map((order) => {
+                  const statusColors: Record<string, string> = {
+                    Preparing: "bg-yellow-100 text-yellow-800 border-yellow-200",
+                    Ready: "bg-green-100 text-green-800 border-green-200",
+                    Served: "bg-blue-100 text-blue-800 border-blue-200",
+                  };
+                  
+                  return (
+                    <div
+                      key={order._id}
+                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">
+                            Order #{order._id.slice(-6)}
+                            {order.roomNumber && (
+                              <span className="ml-2 text-sm text-gray-500">
+                                Room {order.roomNumber}
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-sm text-gray-500 mt-1">
+                            {order.items.map(item => `${item.quantity}x ${item.name}`).join(', ')}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {new Date(order.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
+                              statusColors[order.status] || "bg-gray-100 text-gray-800 border-gray-200"
+                            }`}
+                          >
+                            {order.status}
+                          </span>
+                          <p className="text-sm font-bold text-gray-900 mt-2">
+                            ${order.totalAmount.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Active Trip Requests Section */}
+          {activeTrips.length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Trip Packages
+              </h3>
+              <div className="space-y-3">
+                {activeTrips.map((trip) => {
+                  const statusColors: Record<string, string> = {
+                    Requested: "bg-blue-100 text-blue-800 border-blue-200",
+                    Pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
+                    Confirmed: "bg-green-100 text-green-800 border-green-200",
+                    Approved: "bg-purple-100 text-purple-800 border-purple-200",
+                  };
+                  
+                  return (
+                    <div
+                      key={trip._id}
+                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-semibold text-gray-900">
+                            {trip.packageName || trip.location || 'Trip Request'}
+                          </h4>
+                          {trip.tripDate && (
+                            <p className="text-sm text-gray-500 mt-1">
+                              Date: {new Date(trip.tripDate).toLocaleDateString()}
+                            </p>
+                          )}
+                          {trip.participants && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              Participants: {trip.participants}
+                            </p>
+                          )}
+                        </div>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
+                            statusColors[trip.status] || "bg-gray-100 text-gray-800 border-gray-200"
+                          }`}
+                        >
+                          {trip.status}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </CustomerLayout>

@@ -36,12 +36,16 @@ interface NewBookingModalProps {
   onClose: () => void;
   onComplete: () => void;
   selectedRoom?: any; // Accept the room object
+  defaultCheckIn?: string;
+  defaultCheckOut?: string;
 }
 
 export default function NewBookingModal({
   onClose,
   onComplete,
-  selectedRoom
+  selectedRoom,
+  defaultCheckIn = "",
+  defaultCheckOut = ""
 }: NewBookingModalProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [bookingData, setBookingData] = useState<BookingData>({
@@ -55,8 +59,8 @@ export default function NewBookingModal({
     },
     bookingDetails: {
       roomType: selectedRoom?.type || "", // Pre-fill if room selected
-      checkIn: "",
-      checkOut: "",
+      checkIn: defaultCheckIn,
+      checkOut: defaultCheckOut,
       adults: 1,
       children: 0,
       rooms: 1,

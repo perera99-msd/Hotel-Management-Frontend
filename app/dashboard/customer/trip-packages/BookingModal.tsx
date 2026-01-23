@@ -38,6 +38,8 @@ export default function BookingModal({
     const { user, profile, token } = useContext(AuthContext);
     const [guests, setGuests] = useState(1);
     const [tripDate, setTripDate] = useState("");
+    const [bookings, setBookings] = useState<any[]>([]);
+    const [selectedBookingId, setSelectedBookingId] = useState("");
     const [guestInfo, setGuestInfo] = useState<GuestInfo>({
         fullName: "",
         email: "",
@@ -59,10 +61,43 @@ export default function BookingModal({
         }
     }, [isOpen, profile, user]);
 
+    useEffect(() => {
+        const fetchBookings = async () => {
+            if (!token || !isOpen) return;
+            try {
+                const res = await fetch(`${API_URL}/api/bookings`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    setBookings(await res.json());
+                }
+            } catch (err) {
+                console.error("Failed to load bookings", err);
+            }
+        };
+        fetchBookings();
+    }, [token, isOpen, API_URL]);
+
+    useEffect(() => {
+        const firstEligible = bookings.find((b) => {
+            const status = (b.status || '').toLowerCase();
+            return status === 'confirmed' || status === 'checkedin' || status === 'checked-in';
+        });
+        const firstId = firstEligible?._id || "";
+        setSelectedBookingId((prev) => prev === firstId ? prev : firstId);
+    }, [bookings]);
+
     const serviceFee = 12.0;
     const discount = 0;
     const subtotal = packageItem.price * guests;
     const total = subtotal + serviceFee - discount;
+
+    const eligibleBookings = bookings.filter((b) => {
+        const status = (b.status || '').toLowerCase();
+        return status === 'confirmed' || status === 'checkedin' || status === 'checked-in';
+    });
+
+    const selectedBooking = eligibleBookings.find((b) => b._id === selectedBookingId);
 
     const handleGuestChange = (increment: boolean) => {
         setGuests((prev) => {
@@ -85,6 +120,11 @@ export default function BookingModal({
             return;
         }
 
+        if (!selectedBookingId) {
+            toast.error("Select a confirmed or checked-in booking first");
+            return;
+        }
+
         if (!guestInfo.fullName || !guestInfo.email || !guestInfo.phoneNumber || !tripDate) {
             toast.error("Please fill in all required fields");
             return;
@@ -100,6 +140,7 @@ export default function BookingModal({
             const bookingData = {
                 packageId: packageItem.id,
                 participants: guests,
+                bookingId: selectedBookingId,
                 tripDate,
                 guestInfo: {
                     ...guestInfo,
@@ -136,6 +177,7 @@ export default function BookingModal({
         onClose();
         setGuests(1);
         setTripDate("");
+        setSelectedBookingId("");
     };
 
     if (!isOpen) return null;
@@ -175,15 +217,72 @@ export default function BookingModal({
                             />
                         )}
 
+                        {/* Booking Selector */}
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Select Booking *</label>
+                            {eligibleBookings.length === 0 ? (
+                                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                                    You need a confirmed or checked-in booking before requesting a trip.
+                                </div>
+                            ) : (
+                                <select
+                                    value={selectedBookingId}
+                                    onChange={(e) => setSelectedBookingId(e.target.value)}
+                                    className="w-full p-2 border border-gray-300 rounded text-black"
+                                >
+                                    {eligibleBookings.map((booking) => {
+                                        const room = booking.roomId?.roomNumber || booking.roomId?.number || booking.roomNumber;
+                                        const labelRoom = room ? `Room ${room}` : "Booking";
+                                        return (
+                                            <option key={booking._id} value={booking._id}>
+                                                {labelRoom} • {booking.status}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            )}
+                            {selectedBooking && selectedBooking.status?.toLowerCase() === 'confirmed' && (
+                                <p className="text-xs text-amber-700 mt-1">Trips will be approved after you check in.</p>
+                            )}
+                        </div>
+
                         {/* Trip Date and Guests */}
                         <div className="flex items-center justify-between mb-4">
-                            <input
-                                type="date"
-                                value={tripDate}
-                                onChange={(e) => setTripDate(e.target.value)}
-                                className="w-[60%] p-2 border border-gray-300 rounded text-black placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#199FDA]"
-                                min={new Date().toISOString().split("T")[0]}
-                            />
+                            {selectedBooking ? (
+                                <div className="flex flex-col w-[60%]">
+                                    <input
+                                        type="date"
+                                        value={tripDate}
+                                        onChange={(e) => setTripDate(e.target.value)}
+                                        className="w-full p-2 border border-gray-300 rounded text-black placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#199FDA]"
+                                        min={selectedBooking.checkIn ? new Date(selectedBooking.checkIn).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]}
+                                        max={selectedBooking.checkOut ? new Date(selectedBooking.checkOut).toISOString().split("T")[0] : undefined}
+                                    />
+                                    {selectedBooking.checkIn && selectedBooking.checkOut && (
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Dates: {new Date(selectedBooking.checkIn).toLocaleDateString()} - {new Date(selectedBooking.checkOut).toLocaleDateString()}
+                                        </p>
+                                    )}
+                                    {tripDate && (
+                                        <>
+                                            {(new Date(tripDate) < new Date(selectedBooking.checkIn || new Date())) && (
+                                                <p className="text-xs text-red-600 mt-1">Date is before check-in. Contact reception to extend booking.</p>
+                                            )}
+                                            {(new Date(tripDate) > new Date(selectedBooking.checkOut || new Date())) && (
+                                                <p className="text-xs text-red-600 mt-1">Date is after check-out. Contact reception to extend booking.</p>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            ) : (
+                                <input
+                                    type="date"
+                                    value={tripDate}
+                                    onChange={(e) => setTripDate(e.target.value)}
+                                    className="w-[60%] p-2 border border-gray-300 rounded text-black placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[#199FDA]"
+                                    min={new Date().toISOString().split("T")[0]}
+                                />
+                            )}
                             <div className="flex items-center">
                                 <button
                                     onClick={() => handleGuestChange(false)}
@@ -253,7 +352,7 @@ export default function BookingModal({
                         {/* Confirm Button */}
                         <button
                             onClick={handleConfirmBooking}
-                            disabled={loading}
+                            disabled={loading || !selectedBookingId || eligibleBookings.length === 0}
                             className="mt-4 w-full bg-[#199FDA] text-white py-2 rounded-md hover:bg-[#138bc3] transition font-medium disabled:opacity-50"
                         >
                             {loading ? "Processing..." : "Confirm Booking"}

@@ -52,6 +52,7 @@ const Dashboard: React.FC = () => {
   const [occupancyData, setOccupancyData] = useState<any[]>([]);
   const [roomStatusData, setRoomStatusData] = useState<any[]>([]);
   const [revenueData, setRevenueData] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -118,6 +119,8 @@ const Dashboard: React.FC = () => {
                 value: m.revenue
             })) || [];
             setRevenueData(monthlyRevenue);
+
+            setRecentActivity(dashboardData.recentActivity || []);
         }
 
       } catch (error) {
@@ -244,7 +247,7 @@ const Dashboard: React.FC = () => {
               nameKey="name"
             />
           </div>
-          <RecentActivity />
+          <RecentActivity items={recentActivity} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

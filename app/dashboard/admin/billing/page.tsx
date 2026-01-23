@@ -9,6 +9,7 @@ import BillFilters from "../../../components/billing/BillFilters";
 import QuickActions from "../../../components/billing/QuickActions";
 import BillCreation from "../../../components/billing/BillCreation";
 import { format } from "date-fns";
+import toast from "react-hot-toast";
 
 export default function Billing() {
   const { user } = useAuth();
@@ -22,8 +23,9 @@ export default function Billing() {
   const [dateFilter, setDateFilter] = useState("all");
   
   const [showBillForm, setShowBillForm] = useState(false);
-  const [showPaymentSummary, setShowPaymentSummary] = useState(false); // ✅ State for Payment Summary Modal
+  const [showPaymentSummary, setShowPaymentSummary] = useState(false);
   const [billToView, setBillToView] = useState<Bill | null>(null);
+  const [billToEdit, setBillToEdit] = useState<Bill | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -76,10 +78,12 @@ export default function Billing() {
                 quantity: item.qty || 1,
                 rate: (item.amount / (item.qty || 1)), 
                 amount: item.amount,
-                category: item.category || 'other'
+                category: item.category || 'other',
+                source: item.source
               })),
               subtotal: inv.subtotal,
               tax: inv.tax,
+              discount: inv.discount || 0,
               total: inv.total,
               status: inv.status,
               createdAt: new Date(inv.createdAt),
@@ -151,33 +155,22 @@ export default function Billing() {
   // A. Create Bill
   const handleCreateBillSubmit = async (newBillData: Bill) => {
     try {
-        const token = await user?.getIdToken();
-        const res = await fetch(`${API_URL}/api/invoices`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                bookingId: newBillData.bookingId,
-                items: newBillData.items.map(i => ({
-                    description: i.description,
-                    qty: i.quantity,
-                    amount: i.amount,
-                    category: i.category
-                })),
-                status: newBillData.status
-            })
-        });
-
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || "Failed to create bill");
-        }
-        
-        window.location.reload(); 
+      if (billToEdit) {
+        // Editing: replace the bill in the list
+        setBills((prev) => 
+          prev.map((b) => b.id === billToEdit.id ? newBillData : b)
+        );
+        toast.success('Bill updated successfully!');
+      } else {
+        // Creating: add new bill
+        setBills((prev) => [...prev, newBillData]);
+        toast.success('Bill created successfully!');
+      }
+      setShowBillForm(false);
+      setBillToEdit(null);
+      setBillToView(null);
     } catch (err: any) {
-        alert("Error creating bill: " + err.message);
+      toast.error("Error: " + err.message);
     }
   };
 
@@ -185,26 +178,97 @@ export default function Billing() {
   const handleMarkPaid = async (billToUpdate: Bill) => {
     try {
         const token = await user?.getIdToken();
+        
+        // Extract custom items and discounts from the bill to preserve them
+        const customItems = billToUpdate.items
+          .filter((item: any) => item.source === 'custom')
+          .map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            qty: item.quantity,
+            rate: item.rate,
+            amount: item.amount,
+            category: item.category,
+            source: 'custom'
+          }));
+        
+        // Extract discount if exists
+        const discountItem = billToUpdate.items.find((item: any) => item.source === 'discount');
+        const discount = discountItem ? {
+          amount: Math.abs(discountItem.amount),
+          description: discountItem.description.replace('Discount: ', '').replace('Discount', '')
+        } : null;
+        
         const res = await fetch(`${API_URL}/api/invoices/${billToUpdate.id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ status: 'paid' })
+            body: JSON.stringify({ 
+              status: 'paid',
+              customItems,
+              discountItem: discount
+            })
         });
 
         if (res.ok) {
+            const updatedInvoice = await res.json();
             setBills((prev) =>
               prev.map((b) =>
                 b.id === billToUpdate.id
-                  ? { ...b, status: "paid", paidAt: new Date() }
+                  ? {
+                      ...b,
+                      status: "paid",
+                      paidAt: new Date(),
+                      items: updatedInvoice.lineItems.map((item: any) => ({
+                        description: item.description,
+                        quantity: item.qty || 1,
+                        rate: item.amount / (item.qty || 1),
+                        amount: item.amount,
+                        category: item.category || 'other',
+                        source: item.source
+                      })),
+                      subtotal: updatedInvoice.subtotal,
+                      tax: updatedInvoice.tax,
+                      total: updatedInvoice.total
+                    }
                   : b
               )
             );
+            toast.success('Bill marked as paid');
         }
     } catch (err) {
         console.error("Failed to mark as paid", err);
+        toast.error('Failed to mark bill as paid');
+    }
+  };
+
+  // C. Cancel Bill
+  const handleCancelBill = async (billToCancel: Bill) => {
+    if (!confirm(`Are you sure you want to cancel bill ${billToCancel.id}? This will delete the bill permanently.`)) {
+      return;
+    }
+
+    try {
+        const token = await user?.getIdToken();
+        const res = await fetch(`${API_URL}/api/invoices/${billToCancel.id}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (res.ok) {
+            setBills((prev) => prev.filter((b) => b.id !== billToCancel.id));
+            toast.success('Bill cancelled and deleted successfully');
+        } else {
+            const errorData = await res.json();
+            toast.error(errorData.error || 'Failed to cancel bill');
+        }
+    } catch (err) {
+        console.error("Failed to cancel bill", err);
+        toast.error('Failed to cancel bill');
     }
   };
 
@@ -388,8 +452,8 @@ export default function Billing() {
             initialGuestId=""
             initialBookingId=""
             initialStatus="pending"
-            mode={billToView ? "view" : "create"}
-            billToView={billToView || undefined}
+            mode={billToEdit ? "edit" : billToView ? "view" : "create"}
+            billToView={billToEdit || billToView || undefined}
             onCreateBill={handleCreateBillSubmit}
           />
         )}
@@ -466,9 +530,11 @@ export default function Billing() {
                 key={bill.id}
                 bill={bill}
                 guest={getGuestForBill(bill.guestId)}
-                onView={(b) => { setBillToView(b); setShowBillForm(true); }}
-                onDownload={() => handleDownloadBill(bill)} // ✅ Wired up PDF download
+                onView={(b) => { setBillToEdit(null); setBillToView(b); setShowBillForm(true); }}
+                onEdit={(b) => { setBillToView(null); setBillToEdit(b); setShowBillForm(true); }}
+                onDownload={() => handleDownloadBill(bill)}
                 onMarkPaid={handleMarkPaid}
+                onCancel={handleCancelBill}
               />
             ))}
           </div>
@@ -482,10 +548,10 @@ export default function Billing() {
         {/* Quick Actions (Hidden in print) */}
         <div className="print:hidden">
             <QuickActions 
-                onCreateBillClick={() => { setBillToView(null); setShowBillForm(true); }}
-                onGenerateReport={handleGenerateReport} // ✅ Wired up
-                onExportBills={handleExportBills}       // ✅ Wired up
-                onPaymentSummary={() => setShowPaymentSummary(true)} // ✅ Wired up
+                onCreateBillClick={() => { setBillToView(null); setBillToEdit(null); setShowBillForm(true); }}
+                onGenerateReport={handleGenerateReport}
+                onExportBills={handleExportBills}
+                onPaymentSummary={() => setShowPaymentSummary(true)}
             />
         </div>
       </div>

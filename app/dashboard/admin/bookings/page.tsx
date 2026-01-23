@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 import NewBookingModal from "../../../components/bookings/NewBookingModal";
+import ExtendStayModal from "../../../components/bookings/ExtendStayModal";
 import BookingCalendar from "../../../components/bookings/BookingCalendar";
 import BookingList from "../../../components/bookings/BookingList";
 import { Calendar, CheckCircle, UserCheck, LogOut, List } from "lucide-react";
@@ -40,6 +41,7 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [extendStayBooking, setExtendStayBooking] = useState<Booking | null>(null);
 
   // Fetch Bookings Wrapped in useCallback to use in dependencies
   const fetchBookings = useCallback(async () => {
@@ -185,6 +187,10 @@ export default function BookingsPage() {
       } catch (e) { console.error(e); }
   };
 
+  const handleExtendStay = (booking: Booking) => {
+    setExtendStayBooking(booking);
+  };
+
   return (
     <AdminReceptionistLayout role="admin">
       <div className="space-y-6">
@@ -285,6 +291,7 @@ export default function BookingsPage() {
                 onCheckIn={handleCheckIn}
                 onCheckOut={handleCheckOut}
                 onCancel={handleCancelBooking}
+                onExtend={handleExtendStay}
               />
             </div>
           )}
@@ -296,6 +303,13 @@ export default function BookingsPage() {
         onClose={handleCloseModal}
         editingBooking={editingBooking}
         onUpdateBooking={handleUpdateSuccess}
+      />
+
+      <ExtendStayModal
+        isOpen={!!extendStayBooking}
+        onClose={() => setExtendStayBooking(null)}
+        booking={extendStayBooking}
+        onExtendSuccess={fetchBookings}
       />
     </AdminReceptionistLayout>
   );

@@ -19,14 +19,16 @@ export default function AddTripBookingModal({
   const [loading, setLoading] = useState(false);
   const [guests, setGuests] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
   const [searchGuest, setSearchGuest] = useState("");
   
   const [formData, setFormData] = useState({
     guestId: "",
+    bookingId: "",
     packageId: "",
     tripDate: "",
     participants: 1,
-    status: "Confirmed",
+    status: "Pending",
     notes: ""
   });
 
@@ -41,13 +43,15 @@ export default function AddTripBookingModal({
       const token = await auth.currentUser?.getIdToken();
       if (!token) return;
 
-      const [usersRes, tripsRes] = await Promise.all([
+      const [usersRes, tripsRes, bookingsRes] = await Promise.all([
         fetch(`${API_URL}/api/users`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_URL}/api/trips`, { headers: { Authorization: `Bearer ${token}` } })
+        fetch(`${API_URL}/api/trips`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/api/bookings`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
 
       if (usersRes.ok) setGuests(await usersRes.json());
       if (tripsRes.ok) setPackages(await tripsRes.json());
+      if (bookingsRes.ok) setBookings(await bookingsRes.json());
 
     } catch (e) {
       console.error("Failed to load data", e);
@@ -55,8 +59,8 @@ export default function AddTripBookingModal({
   };
 
   const handleSubmit = async () => {
-    if (!formData.guestId || !formData.packageId || !formData.tripDate) {
-      toast.error("Please fill all required fields");
+    if (!formData.guestId || !formData.packageId || !formData.tripDate || !formData.bookingId) {
+      toast.error("Please fill all required fields, including booking");
       return;
     }
 
@@ -77,7 +81,7 @@ export default function AddTripBookingModal({
         onSuccess();
         onClose();
         // Reset
-        setFormData({ guestId: "", packageId: "", tripDate: "", participants: 1, status: "Confirmed", notes: "" });
+        setFormData({ guestId: "", bookingId: "", packageId: "", tripDate: "", participants: 1, status: "Pending", notes: "" });
       } else {
         toast.error("Failed to create booking");
       }
@@ -92,6 +96,26 @@ export default function AddTripBookingModal({
     g.name.toLowerCase().includes(searchGuest.toLowerCase()) || 
     g.email.toLowerCase().includes(searchGuest.toLowerCase())
   );
+
+  const eligibleBookings = bookings.filter((b) => {
+    const status = (b.status || '').toLowerCase();
+    const matchesGuest = formData.guestId ? (b.guestId?._id === formData.guestId || b.guestId === formData.guestId) : true;
+    const statusAllowed = status === 'confirmed' || status === 'checkedin' || status === 'checked-in';
+    return matchesGuest && statusAllowed;
+  });
+
+  const selectedBooking = eligibleBookings.find(b => b._id === formData.bookingId);
+  const bookingCheckedIn = selectedBooking ? ['checkedin', 'checked-in'].includes((selectedBooking.status || '').toLowerCase()) : false;
+
+  useEffect(() => {
+    // Auto-select first eligible booking for the chosen guest
+    const firstBookingId = eligibleBookings[0]?._id || "";
+    setFormData((prev) => {
+      if (prev.bookingId === firstBookingId) return prev;
+      return { ...prev, bookingId: firstBookingId };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.guestId, bookings]);
 
   if (!isOpen) return null;
 
@@ -128,7 +152,7 @@ export default function AddTripBookingModal({
                             key={g._id} 
                             className="p-2 hover:bg-gray-50 cursor-pointer text-sm"
                             onClick={() => {
-                                setFormData({...formData, guestId: g._id});
+                          setFormData({...formData, guestId: g._id, bookingId: ""});
                                 setSearchGuest("");
                             }}
                         >
@@ -137,6 +161,36 @@ export default function AddTripBookingModal({
                         </div>
                     ))}
                 </div>
+            )}
+          </div>
+
+          {/* 1b. Select Booking */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select Booking</label>
+            {eligibleBookings.length === 0 ? (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                Choose a guest with a confirmed or checked-in booking to add a trip.
+              </div>
+            ) : (
+              <select
+                className="w-full p-2 border rounded-lg text-sm outline-none"
+                value={formData.bookingId}
+                onChange={(e) => setFormData({ ...formData, bookingId: e.target.value })}
+              >
+                {eligibleBookings.map((booking) => {
+                  const status = booking.status;
+                  const room = booking.roomId?.roomNumber || booking.roomId?.number || booking.roomNumber;
+                  const labelRoom = room ? `Room ${room}` : "Booking";
+                  return (
+                    <option key={booking._id} value={booking._id}>
+                      {labelRoom} • {status}
+                    </option>
+                  );
+                })}
+              </select>
+            )}
+            {selectedBooking && !bookingCheckedIn && (
+              <p className="text-xs text-amber-700 mt-1">You can confirm only after this booking is checked-in.</p>
             )}
           </div>
 
@@ -173,8 +227,25 @@ export default function AddTripBookingModal({
                         className="w-full pl-9 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                         value={formData.tripDate}
                         onChange={(e) => setFormData({...formData, tripDate: e.target.value})}
+                        min={selectedBooking?.checkIn ? new Date(selectedBooking.checkIn).toISOString().split("T")[0] : undefined}
+                        max={selectedBooking?.checkOut ? new Date(selectedBooking.checkOut).toISOString().split("T")[0] : undefined}
                     />
                 </div>
+                {selectedBooking?.checkIn && selectedBooking?.checkOut && (
+                    <p className="text-xs text-gray-500 mt-1">
+                        Booking: {new Date(selectedBooking.checkIn).toLocaleDateString()} - {new Date(selectedBooking.checkOut).toLocaleDateString()}
+                    </p>
+                )}
+                {formData.tripDate && (
+                    <>
+                        {(new Date(formData.tripDate) < new Date(selectedBooking?.checkIn || new Date())) && (
+                            <p className="text-xs text-orange-600 mt-1">Date before check-in. Extend booking to use earlier dates.</p>
+                        )}
+                        {(new Date(formData.tripDate) > new Date(selectedBooking?.checkOut || new Date())) && (
+                            <p className="text-xs text-orange-600 mt-1">Date after check-out. Extend booking to use later dates.</p>
+                        )}
+                    </>
+                )}
             </div>
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Participants</label>
@@ -198,7 +269,7 @@ export default function AddTripBookingModal({
                 value={formData.status}
                 onChange={(e) => setFormData({...formData, status: e.target.value})}
             >
-                <option value="Confirmed">Confirmed</option>
+              <option value="Confirmed" disabled={!bookingCheckedIn}>Confirmed</option>
                 <option value="Pending">Pending</option>
                 <option value="Completed">Completed</option>
                 <option value="Cancelled">Cancelled</option>
@@ -211,7 +282,7 @@ export default function AddTripBookingModal({
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-700 font-medium hover:bg-gray-200 rounded-lg">Cancel</button>
           <button 
             onClick={handleSubmit} 
-            disabled={loading}
+            disabled={loading || !formData.bookingId}
             className="px-4 py-2 text-sm bg-blue-600 text-white font-medium hover:bg-blue-700 rounded-lg disabled:opacity-50"
           >
             {loading ? "Creating..." : "Create Booking"}

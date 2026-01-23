@@ -26,6 +26,7 @@ export default function OrderConfirmationModal({
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [activeRoomNumber, setActiveRoomNumber] = useState<string | null>(null);
+    const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
 
     // Auto-detect room number on open
     useEffect(() => {
@@ -41,6 +42,9 @@ export default function OrderConfirmationModal({
                         const active = bookings.find((b: any) => 
                             b.status === 'CheckedIn' || b.status === 'Checked-In'
                         );
+                        if (active) {
+                            setActiveBookingId(active._id || active.id);
+                        }
                         if (active && active.roomId) {
                             // Handle populated object or string
                             const rNum = typeof active.roomId === 'object' ? active.roomId.roomNumber : null;
@@ -70,9 +74,15 @@ export default function OrderConfirmationModal({
             return;
         }
 
+        if (!activeBookingId) {
+            toast.error("You need a checked-in booking before ordering.");
+            return;
+        }
+
         setLoading(true);
         try {
             const orderData = {
+                bookingId: activeBookingId,
                 items: selectedItems.map(item => ({
                     menuItemId: item.menuItem._id, // Using _id correctly
                     name: item.menuItem.name,      // Sent as fallback/metadata
@@ -125,7 +135,7 @@ export default function OrderConfirmationModal({
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-900">Confirm Order</h2>
                                 <p className="text-gray-600 mt-1">
-                                    {activeRoomNumber ? `Delivering to Room ${activeRoomNumber}` : "Review your selection"}
+                                    {activeBookingId && activeRoomNumber ? `Delivering to Room ${activeRoomNumber}` : "Requires an active checked-in booking"}
                                 </p>
                             </div>
                             <button
@@ -217,7 +227,7 @@ export default function OrderConfirmationModal({
                             </button>
                             <button
                                 onClick={handlePlaceOrder}
-                                disabled={loading}
+                                disabled={loading || !activeBookingId}
                                 className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {loading ? "Placing Order..." : "Place Order"}

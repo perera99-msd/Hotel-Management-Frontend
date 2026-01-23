@@ -25,22 +25,26 @@ export default function ExploreRoomsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedRoom, setSelectedRoom] = useState<any | null>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [roomType, setRoomType] = useState("");
 
   // Fetch Rooms from Backend
   useEffect(() => {
     const fetchRooms = async () => {
-      if (!token) return;
+      if (!token || !checkIn || !checkOut) return;
 
       try {
         setLoading(true);
         const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-        
-        // Fetch only available rooms
-        const response = await fetch(`${API_URL}/api/rooms?status=Available`, {
-             headers: { 
-               Authorization: `Bearer ${token}`,
-               "Content-Type": "application/json"
-             }
+        const params = new URLSearchParams({ checkIn, checkOut });
+        if (roomType) params.append('type', roomType);
+
+        const response = await fetch(`${API_URL}/api/rooms/available?${params.toString()}`, {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
         });
         
         if (response.ok) {
@@ -57,7 +61,7 @@ export default function ExploreRoomsPage() {
     };
 
     fetchRooms();
-  }, [token]);
+  }, [token, checkIn, checkOut, roomType]);
 
   const handleBookNow = (room: Room) => {
     // Map roomNumber to 'number' if the Modal expects 'number'
@@ -84,9 +88,38 @@ export default function ExploreRoomsPage() {
                 <h1 className="text-3xl font-bold text-gray-900">Explore Our Rooms</h1>
                 <p className="text-gray-500 mt-1">Find the perfect space for your stay</p>
             </div>
+            <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+              <input
+                type="date"
+                value={checkIn}
+                onChange={(e) => setCheckIn(e.target.value)}
+                className="border rounded-lg px-3 py-2 text-sm text-black"
+              />
+              <input
+                type="date"
+                value={checkOut}
+                onChange={(e) => setCheckOut(e.target.value)}
+                className="border rounded-lg px-3 py-2 text-sm text-black"
+              />
+              <select
+                value={roomType}
+                onChange={(e) => setRoomType(e.target.value)}
+                className="border rounded-lg px-3 py-2 text-sm text-black"
+              >
+                <option value="">Any type</option>
+                <option value="single">Single</option>
+                <option value="double">Double</option>
+                <option value="suite">Suite</option>
+                <option value="family">Family</option>
+              </select>
+            </div>
         </div>
 
-        {loading ? (
+        {!checkIn || !checkOut ? (
+           <div className="text-center py-16 bg-white rounded-lg border border-gray-200 shadow-sm text-gray-600">
+              Select check-in and check-out dates to see availability.
+           </div>
+        ) : loading ? (
            <div className="flex items-center justify-center h-64">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
            </div>
@@ -167,6 +200,8 @@ export default function ExploreRoomsPage() {
             onClose={() => setIsBookingModalOpen(false)}
             onComplete={handleBookingComplete}
             selectedRoom={selectedRoom}
+            defaultCheckIn={checkIn}
+            defaultCheckOut={checkOut}
           />
         )}
       </div>

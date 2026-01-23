@@ -189,20 +189,61 @@ export default function Billing() {
   const handleMarkPaid = async (billToUpdate: Bill) => {
     try {
         const token = await user?.getIdToken();
+        
+        // Extract custom items and discounts from the bill to preserve them
+        const customItems = billToUpdate.items
+          .filter((item: any) => item.source === 'custom')
+          .map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            qty: item.quantity,
+            rate: item.rate,
+            amount: item.amount,
+            category: item.category,
+            source: 'custom'
+          }));
+        
+        // Extract discount if exists
+        const discountItem = billToUpdate.items.find((item: any) => item.source === 'discount');
+        const discount = discountItem ? {
+          amount: Math.abs(discountItem.amount),
+          description: discountItem.description.replace('Discount: ', '').replace('Discount', '')
+        } : null;
+        
         const res = await fetch(`${API_URL}/api/invoices/${billToUpdate.id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ status: 'paid' })
+            body: JSON.stringify({ 
+              status: 'paid',
+              customItems,
+              discountItem: discount
+            })
         });
 
         if (res.ok) {
+            const updatedInvoice = await res.json();
             setBills((prev) =>
               prev.map((b) =>
                 b.id === billToUpdate.id
-                  ? { ...b, status: "paid", paidAt: new Date() }
+                  ? {
+                      ...b,
+                      status: "paid",
+                      paidAt: new Date(),
+                      items: updatedInvoice.lineItems.map((item: any) => ({
+                        description: item.description,
+                        quantity: item.qty || 1,
+                        rate: item.amount / (item.qty || 1),
+                        amount: item.amount,
+                        category: item.category || 'other',
+                        source: item.source
+                      })),
+                      subtotal: updatedInvoice.subtotal,
+                      tax: updatedInvoice.tax,
+                      total: updatedInvoice.total
+                    }
                   : b
               )
             );

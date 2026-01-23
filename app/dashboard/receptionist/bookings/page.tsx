@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 import NewBookingModal from "../../../components/bookings/NewBookingModal";
+import ExtendStayModal from "../../../components/bookings/ExtendStayModal";
 import BookingCalendar from "../../../components/bookings/BookingCalendar";
 import BookingList from "../../../components/bookings/BookingList";
 import {
@@ -47,6 +48,7 @@ export default function Bookings() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [extendStayBooking, setExtendStayBooking] = useState<Booking | null>(null);
 
   // --- 1. FETCH BOOKINGS ---
   const fetchBookings = useCallback(async () => {
@@ -214,13 +216,14 @@ export default function Bookings() {
       } catch (e) { console.error(e); }
   };
 
-  const handleDateClick = (date: Date) => {
-    // Optional: Could pre-fill modal with date
-    console.log("Date clicked:", date);
+  const handleExtendStay = (booking: Booking) => {
+    setExtendStayBooking(booking);
   };
 
-  const handleBookingClick = (booking: Booking) => {
-    handleEditBooking(booking);
+  // Helper functions that were missing
+  const handleNewBookingClick = () => {
+    setEditingBooking(null);
+    setIsNewBookingOpen(true);
   };
 
   const handleCloseModal = () => {
@@ -228,14 +231,18 @@ export default function Bookings() {
     setEditingBooking(null);
   };
 
-  const handleNewBookingClick = () => {
-    setEditingBooking(null);
-    setIsNewBookingOpen(true);
+  const handleDateClick = (date: Date) => {
+    // Handle date click - could open new booking modal for that date
+    handleNewBookingClick();
+  };
+
+  const handleBookingClick = (booking: Booking) => {
+    handleEditBooking(booking);
   };
 
   return (
-    <AdminReceptionistLayout role="receptionist">
-      <div className="p-6">
+    <AdminReceptionistLayout>
+      <div className="p-8 min-h-screen bg-gray-50">
         {/* Header with View Toggle and New Booking Button */}
         <div className="flex justify-between items-start mb-6">
           <div>
@@ -368,6 +375,7 @@ export default function Bookings() {
                 onCheckIn={handleCheckIn}
                 onCheckOut={handleCheckOut}
                 onCancel={handleCancelBooking}
+                onExtend={handleExtendStay}
               />
             </div>
           )}
@@ -380,6 +388,13 @@ export default function Bookings() {
         onClose={handleCloseModal}
         editingBooking={editingBooking}
         onUpdateBooking={handleUpdateSuccess}
+      />
+
+      <ExtendStayModal
+        isOpen={!!extendStayBooking}
+        onClose={() => setExtendStayBooking(null)}
+        booking={extendStayBooking}
+        onExtendSuccess={fetchBookings}
       />
     </AdminReceptionistLayout>
   );

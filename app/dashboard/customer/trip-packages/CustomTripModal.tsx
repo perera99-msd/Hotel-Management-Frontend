@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useContext } from "react";
+import { useState, useContext, useEffect } from "react";
 import { AuthContext } from "@/app/context/AuthContext";
 import toast from "react-hot-toast";
 
@@ -16,6 +16,8 @@ export default function CustomTripModal({
     onTripCreated,
 }: CustomTripModalProps) {
     const { token } = useContext(AuthContext);
+    const [bookings, setBookings] = useState<any[]>([]);
+    const [selectedBookingId, setSelectedBookingId] = useState("");
     const [tripData, setTripData] = useState({
         destination: "",
         duration: "",
@@ -36,6 +38,32 @@ export default function CustomTripModal({
     
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
+    useEffect(() => {
+        const fetchBookings = async () => {
+            if (!token || !isOpen) return;
+            try {
+                const res = await fetch(`${API_URL}/api/bookings`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    setBookings(await res.json());
+                }
+            } catch (err) {
+                console.error("Failed to load bookings", err);
+            }
+        };
+        fetchBookings();
+    }, [token, isOpen, API_URL]);
+
+    useEffect(() => {
+        const firstEligible = bookings.find((b) => {
+            const status = (b.status || '').toLowerCase();
+            return status === 'confirmed' || status === 'checkedin' || status === 'checked-in';
+        });
+        const firstId = firstEligible?._id || "";
+        setSelectedBookingId((prev) => prev === firstId ? prev : firstId);
+    }, [bookings]);
+
     const preferenceOptions = [
         "Adventure",
         "Relaxation",
@@ -52,6 +80,13 @@ export default function CustomTripModal({
     const participantOptions = Array.from({length: 20}, (_, i) => i + 1);
     const accommodationOptions = ["Luxury", "Standard", "Budget", "Hostel", "Vacation Rental"];
     const transportationOptions = ["Private Car", "Rental Car", "Public Transport", "Tour Bus", "Mixed"];
+
+    const eligibleBookings = bookings.filter((b) => {
+        const status = (b.status || '').toLowerCase();
+        return status === 'confirmed' || status === 'checkedin' || status === 'checked-in';
+    });
+
+    const selectedBooking = eligibleBookings.find((b) => b._id === selectedBookingId);
 
     const handleInputChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -94,6 +129,11 @@ export default function CustomTripModal({
             return;
         }
 
+        if (!selectedBookingId) {
+            toast.error("Select a confirmed or checked-in booking first");
+            return;
+        }
+
         setLoading(true);
         try {
             // Format details as a readable string for the backend 'details' field
@@ -113,6 +153,7 @@ export default function CustomTripModal({
                 location: tripData.destination,
                 tripDate: tripData.startDate,
                 participants: Number(tripData.participants),
+                bookingId: selectedBookingId,
                 details: formattedDetails
             };
 
@@ -158,13 +199,14 @@ export default function CustomTripModal({
             transportation: "",
             activities: "",
         });
+        setSelectedBookingId("");
         setCurrentStep(1);
     };
 
     const isStepValid = () => {
         switch (currentStep) {
             case 1:
-                return tripData.destination && tripData.startDate && tripData.endDate;
+                return tripData.destination && tripData.startDate && tripData.endDate && !!selectedBookingId;
             case 2:
                 return tripData.preferences.length > 0;
             case 3:
@@ -247,6 +289,34 @@ export default function CustomTripModal({
                         {currentStep === 1 && (
                             <div className="space-y-4">
                                 <h3 className="text-lg font-semibold text-black mb-2">Basic Information</h3>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-black mb-2">Select Booking *</label>
+                                    {eligibleBookings.length === 0 ? (
+                                        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                                            You need a confirmed or checked-in booking before requesting a trip.
+                                        </div>
+                                    ) : (
+                                        <select
+                                            value={selectedBookingId}
+                                            onChange={(e) => setSelectedBookingId(e.target.value)}
+                                            className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black bg-white"
+                                        >
+                                            {eligibleBookings.map((booking) => {
+                                                const room = booking.roomId?.roomNumber || booking.roomId?.number || booking.roomNumber;
+                                                const labelRoom = room ? `Room ${room}` : "Booking";
+                                                return (
+                                                    <option key={booking._id} value={booking._id}>
+                                                        {labelRoom} • {booking.status}
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                    )}
+                                    {selectedBooking && selectedBooking.status?.toLowerCase() === 'confirmed' && (
+                                        <p className="text-xs text-amber-700 mt-1">Trips will be approved after you check in.</p>
+                                    )}
+                                </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
@@ -498,7 +568,7 @@ export default function CustomTripModal({
                             ) : (
                                 <button
                                     onClick={handleSubmit}
-                                    disabled={loading}
+                                    disabled={loading || !selectedBookingId || eligibleBookings.length === 0}
                                     className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50"
                                 >
                                     {loading ? "Submitting..." : "Submit Request"}

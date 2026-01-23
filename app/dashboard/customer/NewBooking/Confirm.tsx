@@ -30,8 +30,8 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
     }
 
     if (!data.roomId) {
-        toast.error("No specific room selected. Please go to 'Explore Rooms' to select a room.");
-        return;
+      toast.error("Select an available room before confirming.");
+      return;
     }
 
     setIsLoading(true);

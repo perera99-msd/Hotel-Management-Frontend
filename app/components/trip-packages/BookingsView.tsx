@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { auth } from "@/app/lib/firebase";
 import { format } from "date-fns";
+import toast from "react-hot-toast";
+import { CheckCircle, XCircle, CheckCheck } from "lucide-react";
 
 export default function BookingsView() {
   const [bookings, setBookings] = useState<any[]>([]);
@@ -25,6 +27,95 @@ export default function BookingsView() {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConfirm = async (tripId: string, booking: any) => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+
+      // Check if booking is checked-in
+      const bookingStatus = booking.bookingId?.status;
+      if (bookingStatus !== 'CheckedIn') {
+        toast.error('Trip can only be confirmed after booking is checked-in');
+        return;
+      }
+
+      const res = await fetch(`${API_URL}/api/trips/requests/${tripId}/status`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'Confirmed' })
+      });
+
+      if (res.ok) {
+        toast.success('Trip confirmed successfully');
+        fetchBookings();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Failed to confirm trip');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to confirm trip');
+    }
+  };
+
+  const handleCancel = async (tripId: string) => {
+    if (!confirm('Are you sure you want to cancel this trip request?')) return;
+
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+
+      const res = await fetch(`${API_URL}/api/trips/requests/${tripId}/cancel`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ responseNotes: 'Cancelled by admin' })
+      });
+
+      if (res.ok) {
+        toast.success('Trip cancelled successfully');
+        fetchBookings();
+      } else {
+        toast.error('Failed to cancel trip');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to cancel trip');
+    }
+  };
+
+  const handleMarkComplete = async (tripId: string, tripDate: string) => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+
+      const res = await fetch(`${API_URL}/api/trips/requests/${tripId}/status`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'Completed' })
+      });
+
+      if (res.ok) {
+        toast.success('Trip marked as completed');
+        fetchBookings();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Failed to mark trip as completed');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to mark trip as completed');
     }
   };
 
@@ -90,7 +181,20 @@ export default function BookingsView() {
                  No bookings found.
              </div>
         ) : (
-            bookings.map((booking) => (
+            bookings.map((booking) => {
+                const canConfirm = ['Pending', 'Requested', 'Approved'].includes(booking.status);
+                const canCancel = !['Cancelled', 'Completed', 'Confirmed', 'Approved'].includes(booking.status);
+                const canComplete = booking.status === 'Confirmed' || booking.status === 'Approved';
+                const bookingStatus = booking.bookingId?.status;
+                
+                // Check if trip date is in the past
+                const tripDate = new Date(booking.tripDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                tripDate.setHours(0, 0, 0, 0);
+                const isDatePassed = tripDate <= today;
+                
+                return (
             <div key={booking._id} className="border rounded-lg p-4 bg-white hover:shadow-sm transition-shadow">
                 <div className="flex justify-between items-start">
                 <div className="flex-1">
@@ -106,18 +210,60 @@ export default function BookingsView() {
                     <p className="text-sm text-gray-500 mt-1">
                         Date: {booking.tripDate ? format(new Date(booking.tripDate), 'PPP') : 'Date not set'}
                     </p>
+                    {bookingStatus && (
+                        <p className="text-xs text-gray-400 mt-1">
+                            Booking Status: <span className="font-medium">{bookingStatus}</span>
+                        </p>
+                    )}
                 </div>
-                <div className="text-right">
+                <div className="text-right flex flex-col items-end gap-2">
                     <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
                     {booking.status}
                     </span>
-                    <div className="text-lg font-bold text-gray-900 mt-2">
+                    <div className="text-lg font-bold text-gray-900">
                         ${booking.totalPrice?.toLocaleString()}
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                        {canConfirm && (
+                            <button
+                                onClick={() => handleConfirm(booking._id, booking)}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors"
+                                title={bookingStatus !== 'CheckedIn' ? 'Booking must be checked-in first' : 'Confirm trip'}
+                            >
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                Confirm
+                            </button>
+                        )}
+                        {canComplete && (
+                            <button
+                                onClick={() => handleMarkComplete(booking._id, booking.tripDate)}
+                                disabled={!isDatePassed}
+                                className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg transition-colors ${
+                                    isDatePassed 
+                                        ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                }`}
+                                title={!isDatePassed ? `Trip date must be past (Trip: ${format(new Date(booking.tripDate), 'MMM d')})` : 'Mark trip as completed'}
+                            >
+                                <CheckCheck className="w-3.5 h-3.5" />
+                                Complete
+                            </button>
+                        )}
+                        {canCancel && (
+                            <button
+                                onClick={() => handleCancel(booking._id)}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white text-xs rounded-lg hover:bg-red-700 transition-colors"
+                            >
+                                <XCircle className="w-3.5 h-3.5" />
+                                Cancel
+                            </button>
+                        )}
                     </div>
                 </div>
                 </div>
             </div>
-            ))
+                );
+            })
         )}
       </div>
     </div>

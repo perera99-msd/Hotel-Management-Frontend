@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, UserCheck, LogOut, Bed, Edit, XCircle } from "lucide-react";
+import { Calendar, UserCheck, LogOut, Bed, Edit, XCircle, Clock } from "lucide-react";
 
 // Redefined locally to avoid circular dependencies with page.tsx
 interface Booking {
@@ -19,6 +19,7 @@ interface BookingListProps {
   onCheckIn?: (booking: Booking | any) => void;
   onCheckOut?: (booking: Booking | any) => void;
   onCancel?: (booking: Booking | any) => void;
+  onExtend?: (booking: Booking | any) => void;
 }
 
 export default function BookingList({
@@ -26,7 +27,8 @@ export default function BookingList({
   onEdit,
   onCheckIn,
   onCheckOut,
-  onCancel
+  onCancel,
+  onExtend
 }: BookingListProps) {
 
   const getGuestInfo = (booking: Booking) => {
@@ -137,9 +139,14 @@ export default function BookingList({
                         </>
                       )}
                       {booking.status === 'CheckedIn' && (
-                        <button onClick={() => onCheckOut?.(booking)} className="text-orange-600 hover:text-orange-900" title="Check Out">
-                          <LogOut className="h-4 w-4" />
-                        </button>
+                        <>
+                          <button onClick={() => onExtend?.(booking)} className="text-blue-600 hover:text-blue-900" title="Extend Stay">
+                            <Clock className="h-4 w-4" />
+                          </button>
+                          <button onClick={() => onCheckOut?.(booking)} className="text-orange-600 hover:text-orange-900" title="Check Out">
+                            <LogOut className="h-4 w-4" />
+                          </button>
+                        </>
                       )}
                       {(booking.status !== 'Cancelled' && booking.status !== 'CheckedOut') && (
                         <button onClick={() => onCancel?.(booking)} className="text-red-600 hover:text-red-900" title="Cancel">

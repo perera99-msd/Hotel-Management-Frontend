@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X, Loader2 } from "lucide-react";
 import { Bill, BillItem } from "./BillCard";
+import { useAuth } from "@/app/context/AuthContext";
+import toast from "react-hot-toast";
 
 interface BillCreationProps {
   onClose: () => void;
@@ -28,11 +30,17 @@ export default function BillCreation({
   billToView,
 }: BillCreationProps) {
   const isViewMode = mode === "view";
+  const isEditMode = mode === "edit";
+  const { user } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [guestId, setGuestId] = useState(initialGuestId);
   const [bookingId, setBookingId] = useState(initialBookingId);
   const [status, setStatus] = useState(initialStatus);
   const [billItems, setBillItems] = useState<BillItem[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountDescription, setDiscountDescription] = useState("");
   const [newItem, setNewItem] = useState<Partial<BillItem>>({
     description: "",
     quantity: 1,
@@ -47,23 +55,88 @@ export default function BillCreation({
     rate: "",
   });
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
   useEffect(() => {
-    if (isViewMode && billToView) {
+    if ((isViewMode || isEditMode) && billToView) {
       setGuestId(billToView.guestId);
       setBookingId(billToView.bookingId);
       setStatus(billToView.status);
       setBillItems(billToView.items);
+      
+      // Load discount from bill items if it exists
+      const discountItem = billToView.items.find((item: any) => item.source === 'discount');
+      if (discountItem) {
+        setDiscountAmount(Math.abs(discountItem.amount));
+        // Extract description from discount line item description
+        const desc = discountItem.description.replace('Discount: ', '').replace('Discount', '');
+        setDiscountDescription(desc);
+      } else {
+        setDiscountAmount(0);
+        setDiscountDescription("");
+      }
     } else {
       resetForm();
     }
-  }, [isViewMode, billToView, initialGuestId, initialBookingId, initialStatus]);
+  }, [isViewMode, isEditMode, billToView, initialGuestId, initialBookingId, initialStatus]);
+
+  // Auto-fetch line items when booking changes
+  useEffect(() => {
+    if (bookingId && !isViewMode && !isEditMode) {
+      fetchAutoLineItems();
+    }
+  }, [bookingId]);
+
+  const fetchAutoLineItems = async () => {
+    if (!bookingId || !user) return;
+
+    try {
+      setLoadingItems(true);
+      const token = await user.getIdToken();
+      const res = await fetch(`${API_URL}/api/invoices/booking/${bookingId}/items`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (res.ok) {
+        const items = await res.json();
+        // Convert backend items to UI format
+        const formattedItems: BillItem[] = items.map((item: any) => ({
+          description: item.description,
+          quantity: item.qty || 1,
+          rate: item.amount / (item.qty || 1),
+          amount: item.amount,
+          category: (item.category || 'room') as BillItem["category"],
+        }));
+        setBillItems(formattedItems);
+        toast.success(`Loaded ${formattedItems.length} items from booking`);
+      } else {
+        toast.error('Failed to load items for booking');
+      }
+    } catch (error) {
+      console.error('Failed to fetch auto items:', error);
+      toast.error('Failed to load booking items');
+    } finally {
+      setLoadingItems(false);
+    }
+  };
 
   // Totals
   const subtotal = useMemo(
     () => billItems.reduce((sum, item) => sum + item.amount, 0),
     [billItems]
   );
-  const tax = subtotal * 0.1;
+  
+  // Calculate pre-discount subtotal and tax
+  const preDiscountSubtotal = useMemo(
+    () => billItems
+      .filter((item) => (item as any).source !== 'discount')
+      .reduce((sum, item) => sum + item.amount, 0),
+    [billItems]
+  );
+  const tax = preDiscountSubtotal * 0.1;
   const total = subtotal + tax;
 
   const handleItemChange = (field: keyof BillItem, value: any) => {
@@ -101,6 +174,7 @@ export default function BillCreation({
       rate: newItem.rate!,
       amount: newItem.quantity! * newItem.rate!,
       category: newItem.category || "other",
+      source: "custom"
     };
 
     setBillItems((prev) => [...prev, item]);
@@ -108,29 +182,146 @@ export default function BillCreation({
   };
 
   const handleRemoveItem = (index: number) => {
+    const item = billItems[index];
+    const itemAny = item as any;
+    
+    // Allow removal of custom items and discount items
+    if (itemAny.source === 'custom' || itemAny.source === 'discount') {
+      setBillItems((prev) => prev.filter((_, i) => i !== index));
+      
+      // If removing discount item, reset discount fields
+      if (itemAny.source === 'discount') {
+        setDiscountAmount(0);
+        setDiscountDescription("");
+        toast.success('Discount removed');
+      } else {
+        toast.success('Item removed');
+      }
+      return;
+    }
+    
+    // Prevent removal of auto-calculated items
+    if (itemAny.source === 'booking') {
+      toast.error('Cannot remove room charge from bill');
+      return;
+    }
+    
+    if (itemAny.source === 'trip' && itemAny.tripStatus && ['Confirmed', 'Approved', 'Completed'].includes(itemAny.tripStatus)) {
+      toast.error('Cannot remove confirmed or completed trip from bill');
+      return;
+    }
+    
+    if (itemAny.source === 'order' && itemAny.orderStatus && ['Ready', 'Served'].includes(itemAny.orderStatus)) {
+      toast.error('Cannot remove ready or served order from bill');
+      return;
+    }
+    
+    // For other trips/orders that can be removed, still prevent
+    if (itemAny.source === 'trip' || itemAny.source === 'order') {
+      toast.error('Cannot remove auto-calculated items. Only manually added items can be removed.');
+      return;
+    }
+    
+    // Only custom items (manually added) can be removed
+    if (itemAny.source !== 'custom') {
+      toast.error('Only manually added items can be removed');
+      return;
+    }
+    
     setBillItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleCreateBill = () => {
+  const handleCreateBill = async () => {
     if (!guestId || !bookingId || billItems.length === 0) {
-      alert("Please fill all required fields and add at least one item.");
+      toast.error("Please fill all required fields and add at least one item.");
       return;
     }
 
-    const newBill: Bill = {
-      id: Math.floor(1000 + Math.random() * 9000).toString(),
-      bookingId,
-      guestId,
-      items: billItems,
-      subtotal,
-      tax,
-      total,
-      status,
-      createdAt: new Date(),
-    };
+    if (!user) {
+      toast.error("User not authenticated");
+      return;
+    }
 
-    if (onCreateBill) onCreateBill(newBill);
-    resetForm();
+    setIsSubmitting(true);
+    try {
+      const token = await user.getIdToken();
+      
+      const endpoint = isEditMode 
+        ? `${API_URL}/api/invoices/${billToView?.id}`
+        : `${API_URL}/api/invoices`;
+      
+      const method = isEditMode ? 'PUT' : 'POST';
+
+      // Filter custom items only (exclude discount items from custom array)
+      const customItems = billItems
+        .filter((item) => (item as any).source === 'custom')
+        .map((item) => ({
+          description: item.description,
+          quantity: item.quantity,
+          qty: item.quantity,
+          rate: item.rate,
+          amount: item.amount,
+          category: item.category,
+          source: 'custom'
+        }));
+
+      // Prepare discount item if exists
+      const discountItem = discountAmount > 0 ? {
+        amount: discountAmount,
+        description: discountDescription
+      } : null;
+
+      const res = await fetch(endpoint, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          bookingId,
+          customItems,
+          status,
+          discountItem
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `Failed to ${isEditMode ? 'update' : 'create'} bill`);
+      }
+
+      const result = await res.json();
+      
+      const newBill: Bill = {
+        id: result._id,
+        bookingId,
+        guestId,
+        items: result.lineItems.map((item: any) => ({
+          description: item.description,
+          quantity: item.qty || 1,
+          rate: item.amount / (item.qty || 1),
+          amount: item.amount,
+          category: item.category || 'other',
+          source: item.source
+        })),
+        subtotal: result.subtotal,
+        tax: result.tax,
+        total: result.total,
+        status: result.status as Bill["status"],
+        createdAt: new Date(result.createdAt),
+        paidAt: result.paidAt ? new Date(result.paidAt) : undefined,
+      };
+
+      if (onCreateBill) onCreateBill(newBill);
+      toast.success(`Bill ${isEditMode ? 'updated' : 'created'} successfully!`);
+      resetForm();
+      onClose();
+    } catch (error: any) {
+      console.error(`Failed to ${isEditMode ? 'update' : 'create'} bill:`, error);
+      toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} bill`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const resetForm = () => {
@@ -138,6 +329,8 @@ export default function BillCreation({
     setBookingId(initialBookingId);
     setStatus(initialStatus);
     setBillItems([]);
+    setDiscountAmount(0);
+    setDiscountDescription("");
     setNewItem({ description: "", quantity: 1, rate: 0, category: "room" });
     setItemErrors({ description: "", quantity: "", rate: "" });
   };
@@ -149,7 +342,7 @@ export default function BillCreation({
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold mb-4">
-          {isViewMode ? "View Bill" : "Create New Bill"}
+          {isViewMode ? "View Bill" : isEditMode ? "Edit Bill" : "Create New Bill"}
         </h2>
         <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
           <X className="h-4 w-4 text-gray-600" />
@@ -157,7 +350,7 @@ export default function BillCreation({
       </div>
 
       {/* Guest, Booking & Status */}
-      {!isViewMode && (
+      {!isViewMode && !isEditMode && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -184,7 +377,8 @@ export default function BillCreation({
             <select
               value={bookingId}
               onChange={(e) => setBookingId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              disabled={loadingItems}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             >
               <option value="">Select Booking</option>
               {filteredBookings.map((b) => (
@@ -193,6 +387,12 @@ export default function BillCreation({
                 </option>
               ))}
             </select>
+            {loadingItems && (
+              <div className="flex items-center gap-2 mt-2 text-sm text-blue-600">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading booking items...
+              </div>
+            )}
           </div>
 
           <div>
@@ -212,11 +412,20 @@ export default function BillCreation({
         </div>
       )}
 
-      {/* Add Bill Item */}
-      {!isViewMode && (
-        <div className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-4">
-          <h4 className="text-md font-semibold mb-2">Add Bill Item</h4>
-          <div className="grid grid-cols-5 gap-3 items-end">
+      {/* Add Bill Item - Available in Create and Edit modes */}
+      {(isEditMode || mode === 'create') && (
+        <>
+          {billItems.length > 0 && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800 mb-2">
+                <strong>✓ Auto-calculated items loaded:</strong> Room cost, orders, and trip packages from this booking.
+              </p>
+              <p className="text-xs text-blue-700">{isEditMode ? 'Edit or remove items below.' : 'You can add additional items below or remove items above if needed.'}</p>
+            </div>
+          )}
+          <div className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-4">
+            <h4 className="text-md font-semibold mb-2">Add Manual Charge</h4>
+            <div className="grid grid-cols-5 gap-3 items-end">
             <div>
               <input
                 type="text"
@@ -289,7 +498,8 @@ export default function BillCreation({
               <Plus size={16} /> Add
             </button>
           </div>
-        </div>
+            </div>
+        </>
       )}
 
       {/* Items Table */}
@@ -305,40 +515,89 @@ export default function BillCreation({
             </tr>
           </thead>
           <tbody>
-            {billItems.map((item, index) => (
-              <tr key={index} className="border-b">
-                <td className="p-2">{item.description}</td>
-                <td className="p-2">{item.quantity}</td>
-                <td className="p-2">{item.rate.toFixed(2)}</td>
-                <td className="p-2">{item.amount.toFixed(2)}</td>
-                {!isViewMode && (
-                  <td className="p-2 text-center">
-                    <button
-                      onClick={() => handleRemoveItem(index)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
+            {billItems.map((item, index) => {
+              const itemAny = item as any;
+              const isCustom = itemAny.source === 'custom';
+              const isDiscount = itemAny.source === 'discount';
+              const isRemovable = isCustom || isDiscount;
+              
+              return (
+                <tr key={index} className="border-b">
+                  <td className="p-2">{item.description}</td>
+                  <td className="p-2">{item.quantity}</td>
+                  <td className="p-2">{item.rate.toFixed(2)}</td>
+                  <td className="p-2">{item.amount.toFixed(2)}</td>
+                  {!isViewMode && (
+                    <td className="p-2 text-center">
+                      <button
+                        onClick={() => handleRemoveItem(index)}
+                        disabled={!isRemovable}
+                        className={`${isRemovable ? 'text-red-600 hover:text-red-800' : 'text-gray-400 cursor-not-allowed'}`}
+                        title={isRemovable ? 'Remove item' : 'Only manually added and discount items can be removed'}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+      )}
+
+      {/* Discount Input */}
+      {!isViewMode && (
+        <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+          <h4 className="text-md font-semibold mb-3">Add Discount</h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Discount Amount
+              </label>
+              <input
+                type="number"
+                value={discountAmount}
+                onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Reason (optional)
+              </label>
+              <input
+                type="text"
+                value={discountDescription}
+                onChange={(e) => setDiscountDescription(e.target.value)}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                placeholder="e.g., Early bird, Staff discount"
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Totals */}
       <div className="text-right mb-6 mt-6">
         <p>
-          Subtotal:{" "}
-          <span className="font-semibold">${subtotal.toFixed(2)}</span>
+          Pre-Discount Subtotal:{" "}
+          <span className="font-semibold">${preDiscountSubtotal.toFixed(2)}</span>
         </p>
         <p>
           Tax (10%): <span className="font-semibold">${tax.toFixed(2)}</span>
         </p>
-        <p>
+        {discountAmount > 0 && (
+          <p className="text-green-600">
+            Discount{discountDescription ? ` (${discountDescription})` : ''}: <span className="font-semibold">-${discountAmount.toFixed(2)}</span>
+          </p>
+        )}
+        <p className="text-lg font-bold">
           Total:{" "}
-          <span className="font-semibold text-blue-600">
+          <span className="text-blue-600">
             ${total.toFixed(2)}
           </span>
         </p>
@@ -363,9 +622,11 @@ export default function BillCreation({
             </button>
             <button
               onClick={handleCreateBill}
-              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              Create Bill
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isEditMode ? 'Update Bill' : 'Create Bill'}
             </button>
           </>
         )}

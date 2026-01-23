@@ -31,9 +31,18 @@ interface Guest {
     email: string;
 }
 
+interface BookingSummary {
+    _id: string;
+    roomId: any;
+    guestId: any;
+    status: string;
+}
+
 export default function ManualOrderView() {
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [guests, setGuests] = useState<Guest[]>([]); // Store guests for the dropdown
+    const [bookings, setBookings] = useState<BookingSummary[]>([]);
+    const [selectedBookingId, setSelectedBookingId] = useState<string>("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const { token } = useAuth();
@@ -57,9 +66,10 @@ export default function ManualOrderView() {
             const headers = { 'Authorization': `Bearer ${token}` };
 
             // Fetch Menu Items and Users (Guests) in parallel
-            const [menuRes, userRes] = await Promise.all([
+            const [menuRes, userRes, bookingRes] = await Promise.all([
                 fetch(`${API_URL}/api/menu`, { headers }),
-                fetch(`${API_URL}/api/users`, { headers })
+                fetch(`${API_URL}/api/users`, { headers }),
+                fetch(`${API_URL}/api/bookings`, { headers })
             ]);
 
             if (!menuRes.ok) throw new Error("Failed to fetch menu items");
@@ -79,6 +89,12 @@ export default function ManualOrderView() {
                 setGuests(usersData);
             }
 
+            if (bookingRes.ok) {
+                const bookingData = await bookingRes.json();
+                const checkedIn = bookingData.filter((b: any) => b.status === 'CheckedIn' || b.status === 'Checked-In');
+                setBookings(checkedIn);
+            }
+
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to load data");
             console.error("Error loading data:", err);
@@ -90,6 +106,15 @@ export default function ManualOrderView() {
     useEffect(() => {
         if (token) fetchData();
     }, [token]);
+
+    useEffect(() => {
+        if (!selectedBookingId && bookings.length > 0) {
+            setSelectedBookingId(bookings[0]._id);
+        }
+        if (bookings.length === 0 && selectedBookingId) {
+            setSelectedBookingId("");
+        }
+    }, [bookings, selectedBookingId]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -160,6 +185,11 @@ export default function ManualOrderView() {
             return;
         }
 
+        if (!selectedBookingId) {
+            alert("Select a checked-in booking before creating an order.");
+            return;
+        }
+
         if (selectedItems.length === 0) {
             alert("Please select at least one menu item");
             return;
@@ -170,6 +200,7 @@ export default function ManualOrderView() {
             const matchedGuest = guests.find(g => g.name.toLowerCase() === formData.guestName.toLowerCase());
 
             const orderData = {
+                bookingId: selectedBookingId,
                 guestId: matchedGuest?._id, // Send ID if found
                 guestName: formData.guestName,
                 roomNumber: formData.roomNumber || undefined,
@@ -213,6 +244,12 @@ export default function ManualOrderView() {
 
     const availableMenuItems = menuItems.filter(item => item.available);
 
+    const getBookingLabel = (booking: BookingSummary) => {
+        const roomNumber = (booking as any).roomNumber || booking.roomId?.roomNumber || booking.roomId?.number || booking.roomId?.name;
+        const labelRoom = roomNumber ? `Room ${roomNumber}` : "Room";
+        return `${labelRoom} • ${booking._id.slice(-6)}`;
+    };
+
     if (loading) {
         return (
             <div className="bg-white p-6 rounded-lg shadow text-black">
@@ -249,6 +286,28 @@ export default function ManualOrderView() {
                 {/* Left Column - Guest Information */}
                 <div className="space-y-6">
                     <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium mb-2">Checked-in Booking *</label>
+                            {bookings.length === 0 ? (
+                                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                                    No checked-in bookings available. Check in a guest to place an order.
+                                </div>
+                            ) : (
+                                <select
+                                    value={selectedBookingId}
+                                    onChange={(e) => setSelectedBookingId(e.target.value)}
+                                    className="w-full border rounded px-3 py-2 text-black"
+                                >
+                                    <option value="">Select booking</option>
+                                    {bookings.map((booking) => (
+                                        <option key={booking._id} value={booking._id}>
+                                            {getBookingLabel(booking)}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+
                         <div>
                             <label className="block text-sm font-medium mb-2">Guest Name *</label>
                             <input
@@ -397,7 +456,7 @@ export default function ManualOrderView() {
 
                     <button
                         onClick={handleCreateOrder}
-                        disabled={selectedItems.length === 0}
+                        disabled={selectedItems.length === 0 || !selectedBookingId}
                         className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 transition-colors w-full font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Create Order

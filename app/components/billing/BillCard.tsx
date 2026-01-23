@@ -6,6 +6,7 @@ import {
   CreditCard,
   User,
   Calendar,
+  Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -15,6 +16,8 @@ interface BillCardProps {
   onView?: (bill: Bill) => void;
   onDownload?: (bill: Bill) => void;
   onMarkPaid?: (bill: Bill) => void;
+  onEdit?: (bill: Bill) => void;
+  onCancel?: (bill: Bill) => void;
 }
 
 export interface Guest {
@@ -32,7 +35,8 @@ export interface BillItem {
   quantity: number;
   rate: number;
   amount: number;
-  category: "room" | "meal" | "service" | "other";
+  category: "room" | "meal" | "service" | "other" | "discount";
+  source?: string;
 }
 
 export interface Bill {
@@ -54,6 +58,8 @@ export default function BillCard({
   onView,
   onDownload,
   onMarkPaid,
+  onEdit,
+  onCancel,
 }: BillCardProps): React.ReactElement {
   const getStatusColor = (status: Bill["status"]) => {
     switch (status) {
@@ -190,6 +196,14 @@ export default function BillCard({
             View
           </button>
         )}
+        {bill.status === "pending" && onEdit && (
+          <button
+            onClick={() => onEdit(bill)}
+            className="flex-1 text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-md transition-colors flex items-center justify-center"
+          >
+            Edit
+          </button>
+        )}
         {onDownload && (
           <button
             onClick={() => onDownload(bill)}
@@ -206,6 +220,15 @@ export default function BillCard({
           >
             <CreditCard className="h-4 w-4 mr-1" />
             Mark Paid
+          </button>
+        )}
+        {bill.status === "pending" && onCancel && (
+          <button
+            onClick={() => onCancel(bill)}
+            className="flex-1 text-sm bg-red-600 hover:bg-red-700 text-white font-medium py-2 rounded-md transition-colors flex items-center justify-center"
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Cancel
           </button>
         )}
       </div>
