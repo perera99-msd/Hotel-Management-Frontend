@@ -1,0 +1,269 @@
+/* */
+"use client"
+
+import React, { useState, useEffect } from 'react'
+import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
+import RateModel from "../../../components/rate/ratemodel";
+import RateUpdateModel from "../../../components/rate/rateupdatemodel";
+import { MoreVertical, RefreshCw } from 'lucide-react';
+import { useAuth } from "../../../context/AuthContext"; // ✅ Added Auth
+
+interface RateData {
+  roomType: string
+  cancellationPolicy: string
+  rooms: string
+  price: string
+}
+
+// Matching backend response shape
+interface RateTableData {
+  id: string
+  roomType: string
+  deals: string
+  cancellationPolicy: string
+  dealPrice: string
+  rate: string
+  availability: string
+}
+
+interface UpdateRateData {
+  id: string
+  roomType: string
+  cancellationPolicy: string
+  rooms: string
+  price: string
+}
+
+export default function RatePage() {
+  const { token } = useAuth(); // ✅ Get Token
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
+  const [filterRoomType, setFilterRoomType] = useState('all')
+  const [filterDeals, setFilterDeals] = useState('all')
+  const [filterPolicy, setFilterPolicy] = useState('all')
+  const [isFilterApplied, setIsFilterApplied] = useState(false)
+  const [openMenu, setOpenMenu] = useState<number | null>(null)
+  const [selectedRate, setSelectedRate] = useState<RateTableData | null>(null)
+  const [tableData, setTableData] = useState<RateTableData[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Fetch Rates from API
+  const fetchRates = async () => {
+    if (!token) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/rates`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTableData(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch rates", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRates();
+  }, [token]);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setOpenMenu(null);
+    if (openMenu !== null) document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openMenu]);
+
+  // Filtered data based on filters
+  const filteredData = tableData.filter(item => {
+    if (isFilterApplied) {
+      if (filterRoomType !== 'all' && item.roomType.toLowerCase() !== filterRoomType) return false
+      if (filterDeals !== 'all' && item.deals.toLowerCase() !== filterDeals.replace(/-/g, ' ').toLowerCase()) return false
+      if (filterPolicy !== 'all' && item.cancellationPolicy.toLowerCase() !== filterPolicy.replace(/-/g, ' ').toLowerCase()) return false
+    }
+    return true
+  })
+
+  const handleOpenModal = () => setIsModalOpen(true)
+  const handleCloseModal = () => setIsModalOpen(false)
+
+  const handleSaveRate = (formData: RateData) => {
+    // Refresh list after successful save in modal
+    fetchRates();
+    setIsModalOpen(false);
+  }
+
+  const handleApplyFilter = () => setIsFilterApplied(true)
+
+  const handleClearFilter = () => {
+    setFilterRoomType('all')
+    setFilterDeals('all')
+    setFilterPolicy('all')
+    setIsFilterApplied(false)
+  }
+
+  const handleUpdateRate = (rate: RateTableData) => {
+    setSelectedRate(rate)
+    setIsUpdateModalOpen(true)
+    setOpenMenu(null)
+  }
+
+  const handleUpdateSubmit = (updatedData: UpdateRateData) => {
+    // Refresh list after successful update in modal
+    fetchRates();
+    setIsUpdateModalOpen(false)
+    setSelectedRate(null)
+  }
+
+  const handleDeleteRate = async (rate: RateTableData) => {
+    if (!confirm(`Are you sure you want to delete rate for ${rate.roomType} room?`)) {
+      setOpenMenu(null)
+      return
+    }
+    
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/rates/${rate.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        setTableData(prev => prev.filter(item => item.id !== rate.id));
+        alert(`Rate for ${rate.roomType} room has been deleted successfully!`);
+      } else {
+        alert("Failed to delete rate");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to delete rate");
+    } finally {
+      setOpenMenu(null)
+    }
+  }
+
+  const getDealsColor = (deals: string) => {
+    switch (deals?.toLowerCase()) {
+      case 'family deal': return 'bg-blue-100 text-blue-800'
+      case 'christmas deal': return 'bg-green-100 text-green-800'
+      case 'black friday': return 'bg-purple-100 text-purple-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getPolicyColor = (policy: string) => {
+    switch (policy?.toLowerCase()) {
+      case 'strict': return 'text-red-600'
+      case 'flexible': return 'text-green-600'
+      case 'non refundable': return 'text-gray-600'
+      default: return 'text-gray-800'
+    }
+  }
+
+  return (
+    <AdminReceptionistLayout role="admin">
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="mb-6">
+          <p className="text-gray-600">Rate</p>
+        </div>
+
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-wrap gap-4 items-center">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">Filter:</span>
+              
+              <select value={filterRoomType} onChange={(e) => setFilterRoomType(e.target.value)} className="text-black px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">All room types</option>
+                <option value="single">Single</option>
+                <option value="double">Double</option>
+                <option value="triple">Triple</option>
+                <option value="vip">VIP</option>
+              </select>
+
+              <select value={filterDeals} onChange={(e) => setFilterDeals(e.target.value)} className="text-black px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">All deals</option>
+                <option value="family-deal">Family deal</option>
+                <option value="christmas-deal">Christmas deal</option>
+                <option value="black-friday">Black Friday</option>
+              </select>
+
+              <select value={filterPolicy} onChange={(e) => setFilterPolicy(e.target.value)} className="text-black px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="all">All policies</option>
+                <option value="strict">Strict</option>
+                <option value="flexible">Flexible</option>
+                <option value="non-refundable">Non refundable</option>
+              </select>
+
+              <button onClick={handleApplyFilter} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm">Apply Filter</button>
+              {isFilterApplied && <button onClick={handleClearFilter} className="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium text-sm">Clear Filter</button>}
+              <button onClick={fetchRates} className="p-2 rounded-full hover:bg-gray-200 text-gray-600" title="Refresh"><RefreshCw size={18}/></button>
+            </div>
+          </div>
+
+          <button onClick={handleOpenModal} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">Add rate</button>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-visible">
+          <div className="overflow-x-auto">
+            <div className="grid grid-cols-7 bg-gray-50 px-6 py-4 border-b border-gray-200">
+              <div className="text-sm font-medium text-gray-700">Room type</div>
+              <div className="text-sm font-medium text-gray-700">Deals</div>
+              <div className="text-sm font-medium text-gray-700">Cancellation policy</div>
+              <div className="text-sm font-medium text-gray-700">Deal price</div>
+              <div className="text-sm font-medium text-gray-700">Rate</div>
+              <div className="text-sm font-medium text-gray-700">Availability</div>
+              <div className="text-sm font-medium text-gray-700">Actions</div>
+            </div>
+
+            {isLoading ? (
+                <div className="py-8 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div></div>
+            ) : filteredData.length === 0 ? (
+              <div className="py-8 text-center text-gray-500">No rates found.</div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {filteredData.map((rate, index) => (
+                  <div key={rate.id} className="grid grid-cols-7 px-6 py-4 hover:bg-gray-50 transition-colors">
+                    <div className="text-sm font-medium text-gray-900 flex items-center">{rate.roomType}</div>
+                    <div className="flex items-center"><span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getDealsColor(rate.deals)}`}>{rate.deals}</span></div>
+                    <div className="text-sm font-medium flex items-center"><span className={getPolicyColor(rate.cancellationPolicy)}>{rate.cancellationPolicy}</span></div>
+                    <div className="text-sm font-bold text-gray-900 flex items-center">{rate.dealPrice}</div>
+                    <div className="text-sm font-bold text-gray-900 flex items-center">{rate.rate}</div>
+                    <div className="flex items-center"><div className="text-sm text-gray-700">{rate.availability}</div></div>
+                    <div className="flex items-center justify-end relative">
+                      <MoreVertical onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === index ? null : index); }} className="h-5 w-5 text-gray-500 cursor-pointer hover:text-gray-700"/>
+                      {openMenu === index && (
+                        <div className="absolute right-0 top-8 w-44 bg-white shadow-2xl rounded-lg border border-gray-200 z-50">
+                          <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => handleUpdateRate(rate)}>Update</button>
+                          <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50" onClick={() => handleDeleteRate(rate)}>Delete</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <RateModel isOpen={isModalOpen} onClose={handleCloseModal} onSave={handleSaveRate} />
+        
+        {selectedRate && (
+          <RateUpdateModel
+            isOpen={isUpdateModalOpen}
+            onClose={() => { setIsUpdateModalOpen(false); setSelectedRate(null); }}
+            rateData={{
+              id: selectedRate.id,
+              roomType: selectedRate.roomType.toLowerCase(),
+              cancellationPolicy: selectedRate.cancellationPolicy.toLowerCase(),
+              rooms: selectedRate.availability.replace(/[^0-9]/g, ''),
+              price: selectedRate.rate.replace(/[^0-9.]/g, '')
+            }}
+            onUpdate={handleUpdateSubmit}
+          />
+        )}
+      </div>
+    </AdminReceptionistLayout>
+  )
+}

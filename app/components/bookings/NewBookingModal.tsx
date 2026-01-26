@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { auth } from "@/app/lib/firebase";
 import toast from "react-hot-toast";
-import { Search, Plus, X, User as UserIcon, Calendar, Check } from "lucide-react";
+import { Search, Plus, X, User as UserIcon, Calendar, Check, Percent } from "lucide-react";
 
 interface Booking {
   id?: string;
@@ -35,6 +35,18 @@ interface UserProfile {
   phone?: string;
 }
 
+interface Deal {
+  _id: string;
+  dealName: string;
+  roomType: string[];
+  price: number;
+  discount: number;
+  startDate: string;
+  endDate: string;
+  status: 'Ongoing' | 'Full' | 'Inactive' | 'New' | 'Finished';
+  description?: string;
+}
+
 export default function NewBookingModal({
   isOpen,
   onClose,
@@ -56,6 +68,7 @@ export default function NewBookingModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [rooms, setRooms] = useState<Room[]>([]);
   const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
   
   const [newGuest, setNewGuest] = useState({ name: "", email: "", phone: "" });
 
@@ -74,13 +87,15 @@ export default function NewBookingModal({
       const token = await user.getIdToken();
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [usersRes, roomsRes] = await Promise.all([
+      const [usersRes, roomsRes, dealsRes] = await Promise.all([
         fetch(`${API_URL}/api/users`, { headers }),
-        fetch(`${API_URL}/api/rooms`, { headers })
+        fetch(`${API_URL}/api/rooms`, { headers }),
+        fetch(`${API_URL}/api/deals`, { headers })
       ]);
 
       if (usersRes.ok) setGuests(await usersRes.json());
       if (roomsRes.ok) setRooms(await roomsRes.json());
+      if (dealsRes.ok) setDeals(await dealsRes.json());
     } catch (error) {
       console.error("Failed to fetch data", error);
     }
@@ -229,7 +244,7 @@ export default function NewBookingModal({
       const bookingId = editingBooking?.id || editingBooking?._id;
       const endpoint = isEdit ? `${API_URL}/api/bookings/${bookingId}` : `${API_URL}/api/bookings`;
 
-      const payload = {
+      const payload: Record<string, any> = {
         roomId: formData.roomId,
         checkIn: formData.checkIn,
         checkOut: formData.checkOut,
@@ -264,6 +279,21 @@ export default function NewBookingModal({
   };
 
   if (!isOpen) return null;
+
+  const selectedRoom = rooms.find((r) => r._id === formData.roomId);
+
+  const dealStatusAllowed = ['Ongoing', 'New', 'Inactive', 'Full'];
+  const dateForDeal = formData.checkIn ? new Date(formData.checkIn) : new Date();
+  const filteredDeals = selectedRoom
+    ? deals.filter((d) => {
+        const start = d.startDate ? new Date(d.startDate) : null;
+        const end = d.endDate ? new Date(d.endDate) : null;
+        const inWindow = start && end ? start <= dateForDeal && end >= dateForDeal : true;
+        const statusOk = dealStatusAllowed.includes(d.status);
+        const typeOk = Array.isArray(d.roomType) ? d.roomType.some((t) => t.toLowerCase() === selectedRoom.type.toLowerCase()) : false;
+        return inWindow && statusOk && typeOk;
+      })
+    : [];
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[999] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
@@ -316,7 +346,12 @@ export default function NewBookingModal({
                 <div className="p-4 bg-red-50 border border-red-100 rounded-lg text-center text-sm text-red-600">No rooms available for these dates</div>
              ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-1 max-h-48 overflow-y-auto">
-                    {availableRooms.map(room => (
+                    {availableRooms.map(room => {
+                      const checkInMonth = formData.checkIn ? new Date(formData.checkIn).getMonth() : 0;
+                      const monthlyRates = (room as any).monthlyRates || [];
+                      const displayRate = monthlyRates[checkInMonth] || room.rate || 0;
+                      
+                      return (
                         <button
                             key={room._id}
                             onClick={() => setFormData({...formData, roomId: room._id})}
@@ -332,12 +367,156 @@ export default function NewBookingModal({
                                 </div>
                             )}
                             <div className="font-bold text-gray-900">Room {room.roomNumber}</div>
-                            <div className="text-gray-500 text-xs">{room.type} • ${room.rate}/night</div>
+                            <div className="text-gray-500 text-xs">{room.type} • ${displayRate.toFixed(2)}/night</div>
                         </button>
-                    ))}
+                      );
+                    })}
                 </div>
              )}
            </div>
+
+           {/* Auto-Applied Deal Display */}
+           {selectedRoom && filteredDeals.length > 0 && (
+             <div className="border-t pt-4">
+               <div className="flex items-center gap-2 mb-3">
+                 <Percent className="h-4 w-4 text-emerald-600" />
+                 <p className="text-sm font-medium text-gray-800">Active Deal (Auto-Applied)</p>
+               </div>
+               {(() => {
+                 // Find best deal (lowest final rate)
+                 const checkInMonth = formData.checkIn ? new Date(formData.checkIn).getMonth() : 0;
+                 const monthlyRates = (selectedRoom as any).monthlyRates || [];
+                 const monthRate = monthlyRates[checkInMonth] || selectedRoom.rate || 0;
+                 
+                 const bestDeal = filteredDeals.reduce<{ deal: Deal | null; rate: number }>((best, deal) => {
+                   const discountPercent = deal.discount || 0;
+                   const dealPrice = deal.price;
+                   // Only use dealPrice if it's explicitly set and greater than 0
+                   const rateWithDeal = typeof dealPrice === 'number' && !isNaN(dealPrice) && dealPrice > 0
+                     ? dealPrice
+                     : monthRate * (1 - discountPercent / 100);
+                   
+                   if (best.deal === null || rateWithDeal < best.rate) {
+                     return { deal, rate: rateWithDeal };
+                   }
+                   return best;
+                 }, { deal: null, rate: monthRate });
+
+                 if (bestDeal.deal) {
+                   const deal = bestDeal.deal;
+                   const startLabel = deal.startDate ? new Date(deal.startDate).toLocaleDateString() : "";
+                   const endLabel = deal.endDate ? new Date(deal.endDate).toLocaleDateString() : "";
+                   
+                   return (
+                     <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                       <div className="flex items-center justify-between gap-2 mb-2">
+                         <div className="text-sm font-semibold text-emerald-900">{deal.dealName}</div>
+                         <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">{deal.status}</span>
+                       </div>
+                       <div className="text-xs text-emerald-700 mb-1">Discount {deal.discount}%</div>
+                       {(startLabel || endLabel) && (
+                         <div className="text-xs text-emerald-600 mb-1">Valid: {startLabel} - {endLabel}</div>
+                       )}
+                       {deal.description && <p className="text-xs text-emerald-700 mt-2 line-clamp-2">{deal.description}</p>}
+                       <div className="mt-3 flex items-center gap-2 text-sm text-emerald-800">
+                         <Check className="h-4 w-4" />
+                         <span className="font-medium">This deal will be automatically applied</span>
+                       </div>
+                     </div>
+                   );
+                 }
+                 return null;
+               })()}
+             </div>
+           )}
+
+           {/* Pricing Summary */}
+           {selectedRoom && formData.checkIn && formData.checkOut && (
+             <div className="border-t pt-4">
+               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+                 <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                   <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                   </svg>
+                   Pricing Summary
+                 </h4>
+                 {(() => {
+                   const checkInDate = new Date(formData.checkIn);
+                   const checkOutDate = new Date(formData.checkOut);
+                   const nights = Math.max(1, Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24)));
+                   const checkInMonth = checkInDate.getMonth();
+                   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                   const monthlyRates = (selectedRoom as any).monthlyRates || [];
+                   const monthRate = monthlyRates[checkInMonth] || selectedRoom.rate || 0;
+                   
+                   // Find best deal (auto-applied)
+                   const bestDeal = filteredDeals.reduce<{ deal: Deal | null; rate: number }>((best, deal) => {
+                     const discountPercent = deal.discount || 0;
+                     const dealPrice = deal.price;
+                     // Only use dealPrice if it's explicitly set and greater than 0
+                     const rateWithDeal = typeof dealPrice === 'number' && !isNaN(dealPrice) && dealPrice > 0
+                       ? dealPrice
+                       : monthRate * (1 - discountPercent / 100);
+                     
+                     if (best.deal === null || rateWithDeal < best.rate) {
+                       return { deal, rate: rateWithDeal };
+                     }
+                     return best;
+                   }, { deal: null, rate: monthRate });
+
+                   const appliedDeal = bestDeal.deal;
+                   const discountPercent = appliedDeal?.discount || 0;
+                   const dealPrice = appliedDeal?.price;
+                   
+                   let finalRate = monthRate;
+                   if (appliedDeal) {
+                     // Only use dealPrice if it's explicitly set and greater than 0
+                     finalRate = typeof dealPrice === 'number' && !isNaN(dealPrice) && dealPrice > 0
+                       ? dealPrice 
+                       : monthRate * (1 - discountPercent / 100);
+                   }
+                   
+                   const subtotal = monthRate * nights;
+                   const discount = (monthRate - finalRate) * nights;
+                   const total = finalRate * nights;
+                   
+                   return (
+                     <div className="space-y-2 text-sm">
+                       <div className="flex justify-between items-center text-gray-700">
+                         <span>Room {selectedRoom.roomNumber} • {selectedRoom.type}</span>
+                         <span className="font-medium">{nights} night{nights > 1 ? 's' : ''}</span>
+                       </div>
+                       <div className="flex justify-between items-center text-gray-700">
+                         <span>{monthNames[checkInMonth]} Rate</span>
+                         <span className="font-medium">${monthRate.toFixed(2)}/night</span>
+                       </div>
+                       {appliedDeal && (
+                         <>
+                           <div className="flex justify-between items-center text-emerald-600">
+                             <span className="flex items-center gap-1">
+                               <Percent className="h-3 w-3" />
+                               {appliedDeal.dealName} ({discountPercent}% off)
+                             </span>
+                             <span className="font-medium">-${discount.toFixed(2)}</span>
+                           </div>
+                           <div className="flex justify-between items-center text-gray-700">
+                             <span>Discounted Rate</span>
+                             <span className="font-medium">${finalRate.toFixed(2)}/night</span>
+                           </div>
+                         </>
+                       )}
+                       <div className="border-t border-blue-200 pt-2 mt-2">
+                         <div className="flex justify-between items-center">
+                           <span className="font-semibold text-gray-900">Total Amount</span>
+                           <span className="text-lg font-bold text-blue-600">${total.toFixed(2)}</span>
+                         </div>
+                       </div>
+                     </div>
+                   );
+                 })()}
+               </div>
+             </div>
+           )}
 
            {/* Guest Selection */}
            <div className="border-t pt-4 relative">

@@ -36,7 +36,13 @@ export default function TripPackages() {
         const bkRes = await fetch(`${API_URL}/api/trips/requests`, { headers: { Authorization: `Bearer ${token}` }});
         if(bkRes.ok) {
             const data = await bkRes.json();
-            setBookingCount(data.length);
+            const visible = data.filter((b: any) => {
+              const bookingStatus = b.bookingId?.status;
+              const isTripCompleted = b.status === 'Completed';
+              const isBookingCheckedOut = bookingStatus === 'CheckedOut';
+              return !(isTripCompleted && isBookingCheckedOut);
+            });
+            setBookingCount(visible.length);
         }
 
     } catch (e) { console.error(e); }

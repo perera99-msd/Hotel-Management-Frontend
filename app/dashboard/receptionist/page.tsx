@@ -62,63 +62,48 @@ const Dashboard: React.FC = () => {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
         const headers = { 'Authorization': `Bearer ${token}` };
 
-        // 1. Fetch Main Dashboard Metrics (Rooms, Check-ins)
+        // Fetch dashboard data
         const dashboardRes = await fetch(`${API_URL}/api/reports/dashboard`, { headers });
         const dashboardData = await dashboardRes.json();
 
-        // 2. Fetch Analytics (Revenue, Trends, Daily Occupancy)
-        const analyticsRes = await fetch(`${API_URL}/api/reports/analytics`, { headers });
-        const analyticsData = await analyticsRes.json();
+        // Fetch invoices to calculate real revenue
+        const invoicesRes = await fetch(`${API_URL}/api/invoices`, { headers });
+        const invoicesData = await invoicesRes.json();
 
-        // 3. Fetch Sidebar Counts (Active Orders, Low Stock)
-        const sidebarRes = await fetch(`${API_URL}/api/reports/sidebar-counts`, { headers });
-        const sidebarData = await sidebarRes.json();
-
-        if (dashboardRes.ok && analyticsRes.ok && sidebarRes.ok) {
-            // -- Parse Stats --
+        if (dashboardRes.ok) {
             const { metrics, roomStatus } = dashboardData;
             
             // Calculate Cleaning Rooms (Available Dirty + Occupied Dirty)
             const cleaningCount = (roomStatus?.available?.dirty || 0) + (roomStatus?.occupied?.dirty || 0);
             
+            // Calculate real revenue from paid invoices
+            let totalRevenue = 0;
+            if (Array.isArray(invoicesData)) {
+              totalRevenue = invoicesData
+                .filter((inv: any) => inv.status === 'paid')
+                .reduce((sum: number, inv: any) => sum + (inv.total || 0), 0);
+            }
+            
             setStats({
-                totalRooms: (metrics?.totalAvailableRoom || 0) + (metrics?.totalOccupiedRoom || 0) + cleaningCount + (roomStatus?.available?.inspected || 0), // Sum all states
+                totalRooms: (metrics?.totalAvailableRoom || 0) + (metrics?.totalOccupiedRoom || 0) + cleaningCount + (roomStatus?.available?.inspected || 0),
                 availableRooms: metrics?.totalAvailableRoom || 0,
                 occupiedRooms: metrics?.totalOccupiedRoom || 0,
                 cleaningRooms: cleaningCount,
                 todayCheckIns: metrics?.todayCheckIns || 0,
                 todayCheckOuts: metrics?.todayCheckOuts || 0,
-                todayOrders: sidebarData.dining || 0,
-                lowStockItems: sidebarData.inventory || 0,
-                occupancyRate: analyticsData.metrics?.occupancyRate || 0,
-                revenue: analyticsData.metrics?.revenue || 0,
+                todayOrders: 0,
+                lowStockItems: 0,
+                occupancyRate: metrics?.totalInHotel ? Math.round((metrics.totalInHotel / ((metrics?.totalAvailableRoom || 0) + (metrics?.totalOccupiedRoom || 0)) * 100)) : 0,
+                revenue: totalRevenue,
             });
 
-            // -- Parse Charts --
-            
-            // 1. Weekly Occupancy (Last 7 Days)
-            // Backend returns dailyOccupancy array. We reverse it if needed to show chronological order.
-            const weeklyData = analyticsData.dailyOccupancy?.map((d: any) => ({
-                name: d.day,
-                value: d.occupancy
-            })) || [];
-            setOccupancyData(weeklyData.reverse()); 
-
-            // 2. Room Status Distribution
+            // Room Status Distribution
             setRoomStatusData([
                 { name: "Available", value: metrics?.totalAvailableRoom || 0 },
                 { name: "Occupied", value: metrics?.totalOccupiedRoom || 0 },
                 { name: "Cleaning", value: cleaningCount },
                 { name: "Maintenance", value: (roomStatus?.available?.inspected || 0) },
             ]);
-
-            // 3. Monthly Revenue Trend
-            // Backend 'occupancyData' (monthlyData) contains revenue info
-            const monthlyRevenue = analyticsData.occupancyData?.map((m: any) => ({
-                name: m.name,
-                value: m.revenue
-            })) || [];
-            setRevenueData(monthlyRevenue);
 
             setRecentActivity(dashboardData.recentActivity || []);
         }
@@ -228,8 +213,8 @@ const Dashboard: React.FC = () => {
           />
           <StatsCard
             title="Monthly Revenue"
-            value={`$${stats.revenue.toLocaleString()}`}
-            subtitle="This month"
+            value={`$${stats.revenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            subtitle="Paid invoices"
             icon={TrendingUp}
             bgColor="bg-green-500"
             textColor="text-white"
@@ -242,7 +227,7 @@ const Dashboard: React.FC = () => {
             <ChartCard
               title="Weekly Occupancy Rate"
               type="bar"
-              data={occupancyData}
+              data={occupancyData.length > 0 ? occupancyData : [{ name: "No Data", value: 0 }]}
               dataKey="value"
               nameKey="name"
             />
@@ -261,7 +246,7 @@ const Dashboard: React.FC = () => {
           <ChartCard
             title="Monthly Revenue Trend"
             type="bar"
-            data={revenueData}
+            data={revenueData.length > 0 ? revenueData : [{ name: "No Data", value: 0 }]}
             dataKey="value"
             nameKey="name"
           />

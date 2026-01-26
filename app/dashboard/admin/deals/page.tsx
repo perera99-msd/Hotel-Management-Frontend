@@ -190,7 +190,7 @@ export default function Page() {
             <button onClick={fetchDeals} className="mt-2 px-4 py-2 bg-red-100 text-red-700 rounded text-sm">Retry</button>
           </div>
         ) : (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-visible">
               <div className="grid grid-cols-7 bg-gray-50 px-6 py-4 border-b border-gray-200">
                 <div className="text-sm font-medium text-gray-700">Reference number</div>
                 <div className="text-sm font-medium text-gray-700">Deal name</div>
@@ -206,7 +206,7 @@ export default function Page() {
               ) : (
                 <div className="divide-y divide-gray-100">
                   {currentDeals.map((deal, index) => (
-                    <div key={deal.id} className="grid grid-cols-7 px-6 py-4 hover:bg-gray-50 transition-colors relative">
+                    <div key={deal.id} className="grid grid-cols-7 px-6 py-4 hover:bg-gray-50 transition-colors items-center">
                       <div className="text-sm font-medium text-gray-900">{deal.referenceNumber}</div>
                       <div className="text-sm text-gray-700">{deal.dealName}</div>
                       <div className="text-sm font-medium text-gray-900">{deal.reservationsLeft}</div>
@@ -216,9 +216,12 @@ export default function Page() {
                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(deal.status)}`}>{deal.status}</span>
                       </div>
                       <div className="relative">
-                        <MoreVertical onClick={() => setOpenMenu(openMenu === index ? null : index)} className="h-5 w-5 text-gray-500 cursor-pointer hover:text-gray-700" />
+                        <MoreVertical 
+                          onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === index ? null : index); }} 
+                          className="h-5 w-5 text-gray-500 cursor-pointer hover:text-gray-700" 
+                        />
                         {openMenu === index && (
-                          <div className="absolute right-6 top-6 w-32 bg-white shadow-lg rounded-md border border-gray-200 z-20">
+                          <div className="absolute right-0 top-8 w-40 bg-white shadow-xl rounded-md border border-gray-200 z-50">
                             <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => { setSelectedDeal(deal); setShowUpdateDealModel(true); setOpenMenu(null); }}>Update</button>
                             <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100" onClick={() => handleDeleteDeal(deal)}>Delete</button>
                           </div>

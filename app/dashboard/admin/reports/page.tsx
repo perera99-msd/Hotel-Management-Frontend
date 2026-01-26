@@ -9,7 +9,7 @@ import { useAuth } from "../../../context/AuthContext";
 
 export default function Reports() {
   const { token, loading: authLoading } = useAuth();
-  const [selectedPeriod, setSelectedPeriod] = useState("month");
+  const [selectedPeriod, setSelectedPeriod] = useState("monthly");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isExporting, setIsExporting] = useState(false);
@@ -43,7 +43,7 @@ export default function Reports() {
       
       try {
         setLoading(true);
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/reports/analytics`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/reports/analytics?period=${selectedPeriod}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -127,7 +127,10 @@ export default function Reports() {
               onChange={(e) => setSelectedPeriod(e.target.value)}
               className="w-full md:w-auto rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500 hover:border-gray-400"
             >
-              <option value="month">Last 6 Months</option>
+              <option value="daily">Last 7 Days</option>
+              <option value="weekly">Last 4 Weeks</option>
+              <option value="monthly">Last 6 Months</option>
+              <option value="yearly">Last 2 Years</option>
             </select>
 
             <ExportOptions handleExportReport={handleExportReport} compact />

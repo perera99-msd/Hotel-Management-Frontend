@@ -2,120 +2,103 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
-import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
-import RateModel from "../../../components/rate/ratemodel";
-import RateUpdateModel from "../../../components/rate/rateupdatemodel";
-import { MoreVertical, RefreshCw } from 'lucide-react';
-import { useAuth } from "../../../context/AuthContext"; // ✅ Added Auth
+import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout"
+import { ChevronDown, Save, RefreshCw } from 'lucide-react'
+import { useAuth } from "../../../context/AuthContext"
+import toast from "react-hot-toast"
 
-interface RateData {
-  roomType: string
-  cancellationPolicy: string
-  rooms: string
-  price: string
+interface Room {
+  _id: string
+  roomNumber: string
+  type: string
+  rate: number
+  monthlyRates?: number[]
+  status: string
+  floor: number
 }
 
-// Matching backend response shape
-interface RateTableData {
-  id: string
-  roomType: string
-  deals: string
-  cancellationPolicy: string
-  dealPrice: string
-  rate: string
-  availability: string
-}
-
-interface UpdateRateData {
-  id: string
-  roomType: string
-  cancellationPolicy: string
-  rooms: string
-  price: string
-}
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 export default function RatePage() {
-  const { token } = useAuth(); // ✅ Get Token
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
-  const [filterRoomType, setFilterRoomType] = useState('all')
-  const [filterDeals, setFilterDeals] = useState('all')
-  const [filterPolicy, setFilterPolicy] = useState('all')
-  const [isFilterApplied, setIsFilterApplied] = useState(false)
-  const [openMenu, setOpenMenu] = useState<number | null>(null)
-  const [selectedRate, setSelectedRate] = useState<RateTableData | null>(null)
-  const [tableData, setTableData] = useState<RateTableData[]>([])
+  const { token } = useAuth()
+  const [rooms, setRooms] = useState<Room[]>([])
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
+  const [monthlyRates, setMonthlyRates] = useState<number[]>(Array(12).fill(0))
   const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
-  // Fetch Rates from API
-  const fetchRates = async () => {
-    if (!token) return;
-    setIsLoading(true);
+  const fetchRooms = async () => {
+    if (!token) return
+    setIsLoading(true)
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/rates`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/rooms`, {
         headers: { 'Authorization': `Bearer ${token}` }
-      });
+      })
       if (res.ok) {
-        const data = await res.json();
-        setTableData(data);
+        const data = await res.json()
+        setRooms(data || [])
       }
     } catch (error) {
-      console.error("Failed to fetch rates", error);
+      console.error("Failed to fetch rooms", error)
+      toast.error("Failed to load rooms")
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
-    fetchRates();
-  }, [token]);
+    fetchRooms()
+  }, [token])
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = () => setOpenMenu(null);
-    if (openMenu !== null) document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [openMenu]);
+  const handleRoomSelect = (room: Room) => {
+    setSelectedRoom(room)
+    // Populate monthlyRates from room data or default to rate for all months
+    const rates = room.monthlyRates && room.monthlyRates.length === 12 
+      ? room.monthlyRates 
+      : Array(12).fill(room.rate || 0)
+    setMonthlyRates(rates)
+    setIsDropdownOpen(false)
+  }
 
-  // Filtered data based on filters
-  const filteredData = tableData.filter(item => {
-    if (isFilterApplied) {
-      if (filterRoomType !== 'all' && item.roomType.toLowerCase() !== filterRoomType) return false
-      if (filterDeals !== 'all' && item.deals.toLowerCase() !== filterDeals.replace(/-/g, ' ').toLowerCase()) return false
-      if (filterPolicy !== 'all' && item.cancellationPolicy.toLowerCase() !== filterPolicy.replace(/-/g, ' ').toLowerCase()) return false
+  const handleRateChange = (monthIndex: number, value: string) => {
+    const numValue = parseFloat(value) || 0
+    const updated = [...monthlyRates]
+    updated[monthIndex] = numValue
+    setMonthlyRates(updated)
+  }
+
+  const handleSave = async () => {
+    if (!selectedRoom || !token) return
+    setIsSaving(true)
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/rooms/${selectedRoom._id}/monthly-rates`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ monthlyRates })
+      })
+
+      if (res.ok) {
+        toast.success("Monthly rates updated successfully")
+        await fetchRooms() // Refresh list
+        // Update selected room with new data
+        const updatedRoomData = rooms.find(r => r._id === selectedRoom._id)
+        if (updatedRoomData) {
+          setSelectedRoom({...updatedRoomData, monthlyRates})
+        }
+      } else {
+        const err = await res.json()
+        toast.error(err.error || "Failed to update rates")
+      }
+    } catch (error) {
+      console.error("Save error:", error)
+      toast.error("Failed to save monthly rates")
+    } finally {
+      setIsSaving(false)
     }
-    return true
-  })
-
-  const handleOpenModal = () => setIsModalOpen(true)
-  const handleCloseModal = () => setIsModalOpen(false)
-
-  const handleSaveRate = (formData: RateData) => {
-    // Refresh list after successful save in modal
-    fetchRates();
-    setIsModalOpen(false);
-  }
-
-  const handleApplyFilter = () => setIsFilterApplied(true)
-
-  const handleClearFilter = () => {
-    setFilterRoomType('all')
-    setFilterDeals('all')
-    setFilterPolicy('all')
-    setIsFilterApplied(false)
-  }
-
-  const handleUpdateRate = (rate: RateTableData) => {
-    setSelectedRate(rate)
-    setIsUpdateModalOpen(true)
-    setOpenMenu(null)
-  }
-
-  const handleUpdateSubmit = (updatedData: UpdateRateData) => {
-    // Refresh list after successful update in modal
-    fetchRates();
-    setIsUpdateModalOpen(false)
-    setSelectedRate(null)
   }
 
   const handleDeleteRate = async (rate: RateTableData) => {
@@ -166,102 +149,122 @@ export default function RatePage() {
     <AdminReceptionistLayout role="admin">
       <div className="p-6 bg-gray-50 min-h-screen">
         <div className="mb-6">
-          <p className="text-gray-600">Rate</p>
+          <p className="text-gray-600">Monthly Rate Management</p>
         </div>
 
         <div className="flex items-center justify-between mb-8">
-          <div className="flex flex-wrap gap-4 items-center">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-700">Filter:</span>
-              
-              <select value={filterRoomType} onChange={(e) => setFilterRoomType(e.target.value)} className="text-black px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="all">All room types</option>
-                <option value="single">Single</option>
-                <option value="double">Double</option>
-                <option value="triple">Triple</option>
-                <option value="vip">VIP</option>
-              </select>
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Select Room</label>
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="min-w-[300px] text-left px-4 py-2.5 bg-white border border-gray-300 rounded-lg flex justify-between items-center hover:border-blue-500 transition-colors focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <span className="text-gray-900">
+                  {selectedRoom 
+                    ? `Room ${selectedRoom.roomNumber} - ${selectedRoom.type}` 
+                    : 'Choose a room to manage rates'}
+                </span>
+                <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
 
-              <select value={filterDeals} onChange={(e) => setFilterDeals(e.target.value)} className="text-black px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="all">All deals</option>
-                <option value="family-deal">Family deal</option>
-                <option value="christmas-deal">Christmas deal</option>
-                <option value="black-friday">Black Friday</option>
-              </select>
-
-              <select value={filterPolicy} onChange={(e) => setFilterPolicy(e.target.value)} className="text-black px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="all">All policies</option>
-                <option value="strict">Strict</option>
-                <option value="flexible">Flexible</option>
-                <option value="non-refundable">Non refundable</option>
-              </select>
-
-              <button onClick={handleApplyFilter} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm">Apply Filter</button>
-              {isFilterApplied && <button onClick={handleClearFilter} className="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium text-sm">Clear Filter</button>}
-              <button onClick={fetchRates} className="p-2 rounded-full hover:bg-gray-200 text-gray-600" title="Refresh"><RefreshCw size={18}/></button>
-            </div>
-          </div>
-
-          <button onClick={handleOpenModal} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm">Add rate</button>
-        </div>
-
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <div className="grid grid-cols-7 bg-gray-50 px-6 py-4 border-b border-gray-200">
-              <div className="text-sm font-medium text-gray-700">Room type</div>
-              <div className="text-sm font-medium text-gray-700">Deals</div>
-              <div className="text-sm font-medium text-gray-700">Cancellation policy</div>
-              <div className="text-sm font-medium text-gray-700">Deal price</div>
-              <div className="text-sm font-medium text-gray-700">Rate</div>
-              <div className="text-sm font-medium text-gray-700">Availability</div>
-              <div className="text-sm font-medium text-gray-700">Actions</div>
-            </div>
-
-            {isLoading ? (
-                <div className="py-8 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div></div>
-            ) : filteredData.length === 0 ? (
-              <div className="py-8 text-center text-gray-500">No rates found.</div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {filteredData.map((rate, index) => (
-                  <div key={rate.id} className="grid grid-cols-7 px-6 py-4 hover:bg-gray-50 transition-colors">
-                    <div className="text-sm font-medium text-gray-900 flex items-center">{rate.roomType}</div>
-                    <div className="flex items-center"><span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getDealsColor(rate.deals)}`}>{rate.deals}</span></div>
-                    <div className="text-sm font-medium flex items-center"><span className={getPolicyColor(rate.cancellationPolicy)}>{rate.cancellationPolicy}</span></div>
-                    <div className="text-sm font-bold text-gray-900 flex items-center">{rate.dealPrice}</div>
-                    <div className="text-sm font-bold text-gray-900 flex items-center">{rate.rate}</div>
-                    <div className="flex items-center"><div className="text-sm text-gray-700">{rate.availability}</div></div>
-                    <div className="flex items-center justify-center relative">
-                      <MoreVertical onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === index ? null : index); }} className="h-5 w-5 text-gray-500 cursor-pointer hover:text-gray-700"/>
-                      {openMenu === index && (
-                        <div className="absolute right-6 top-6 w-32 bg-white shadow-lg rounded-md border border-gray-200 z-20">
-                          <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => handleUpdateRate(rate)}>Update</button>
-                          <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100" onClick={() => handleDeleteRate(rate)}>Delete</button>
-                        </div>
-                      )}
-                    </div>
+              {isDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setIsDropdownOpen(false)}></div>
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-y-auto">
+                    {isLoading ? (
+                      <div className="px-4 py-6 text-center text-gray-500">Loading rooms...</div>
+                    ) : rooms.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-gray-500">No rooms available</div>
+                    ) : (
+                      rooms.map((room) => (
+                        <button
+                          key={room._id}
+                          onClick={() => handleRoomSelect(room)}
+                          className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-0 transition-colors"
+                        >
+                          <div className="font-semibold text-sm text-gray-900">Room {room.roomNumber}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {room.type} • Floor {room.floor} • Base Rate: ${room.rate}
+                          </div>
+                        </button>
+                      ))
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
+                </>
+              )}
+            </div>
+
+            <button
+              onClick={fetchRooms}
+              className="mt-6 p-2.5 rounded-lg hover:bg-gray-200 text-gray-600 transition-colors"
+              title="Refresh rooms"
+            >
+              <RefreshCw size={18} />
+            </button>
           </div>
+
+          {selectedRoom && (
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm disabled:opacity-50 shadow-md"
+            >
+              <Save size={18} />
+              {isSaving ? 'Saving...' : 'Save Monthly Rates'}
+            </button>
+          )}
         </div>
 
-        <RateModel isOpen={isModalOpen} onClose={handleCloseModal} onSave={handleSaveRate} />
-        
-        {selectedRate && (
-          <RateUpdateModel
-            isOpen={isUpdateModalOpen}
-            onClose={() => { setIsUpdateModalOpen(false); setSelectedRate(null); }}
-            rateData={{
-              id: selectedRate.id,
-              roomType: selectedRate.roomType.toLowerCase(),
-              cancellationPolicy: selectedRate.cancellationPolicy.toLowerCase(),
-              rooms: selectedRate.availability.replace(/[^0-9]/g, ''),
-              price: selectedRate.rate.replace(/[^0-9.]/g, '')
-            }}
-            onUpdate={handleUpdateSubmit}
-          />
+        {selectedRoom ? (
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+            <div className="mb-6 pb-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Monthly Rates for Room {selectedRoom.roomNumber}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Set different rates for each month. Base rate: ${selectedRoom.rate}/night
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {MONTHS.map((month, index) => (
+                <div key={month} className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition-colors">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {month}
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={monthlyRates[index] || ''}
+                      onChange={(e) => handleRateChange(index, e.target.value)}
+                      className="w-full pl-8 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-gray-900"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Note:</strong> When creating a booking, the rate for the check-in month will be used to calculate the total charge.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg border-2 border-dashed border-gray-300 p-12 text-center">
+            <div className="text-gray-400 mb-4">
+              <svg className="mx-auto h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+            <p className="text-gray-600 font-medium">Select a room to manage monthly rates</p>
+            <p className="text-gray-500 text-sm mt-2">Choose a room from the dropdown above to view and edit its monthly pricing</p>
+          </div>
         )}
       </div>
     </AdminReceptionistLayout>

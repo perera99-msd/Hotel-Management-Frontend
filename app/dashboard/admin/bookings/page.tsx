@@ -58,11 +58,23 @@ export default function BookingsPage() {
 
       if (res.ok) {
         const data = await res.json();
-        // Map _id to id for frontend compatibility
-        const mappedData = data.map((b: any) => ({
-          ...b,
-          id: b._id, 
-        }));
+        // Fetch invoice status for each booking
+        const invoicesRes = await fetch(`${API_URL}/api/invoices`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const invoices = invoicesRes.ok ? await invoicesRes.json() : [];
+        
+        // Map _id to id for frontend compatibility and attach invoice status
+        const mappedData = data.map((b: any) => {
+          const invoice = invoices.find((inv: any) => 
+            (inv.bookingId?._id || inv.bookingId)?.toString() === b._id?.toString()
+          );
+          return {
+            ...b,
+            id: b._id,
+            invoiceStatus: invoice?.status
+          };
+        });
         setBookings(mappedData);
       } else {
         console.error("Failed to load bookings");
@@ -137,13 +149,23 @@ export default function BookingsPage() {
         });
   
         if (res.ok) {
-          toast.success("Guest Checked Out");
-          fetchBookings();
+          toast.success("Guest Checked Out Successfully");
+          // Refetch bookings immediately, then again after small delay to ensure all updates propagate
+          await fetchBookings();
+          setTimeout(() => fetchBookings(), 800);
         } else {
-          const err = await res.json();
-          toast.error(err.error || "Check-out failed");
+          const errText = await res.text();
+          try {
+            const err = JSON.parse(errText);
+            toast.error(err.error || `Check-out failed: ${res.status}`);
+          } catch {
+            toast.error(`Check-out failed: ${res.status} ${res.statusText}`);
+          }
         }
-      } catch (e) { console.error(e); }
+      } catch (e) { 
+        console.error("Checkout error:", e); 
+        toast.error("Check-out error - please try again"); 
+      }
   };
 
   const handleEditBooking = (booking: Booking) => {

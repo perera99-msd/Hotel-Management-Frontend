@@ -128,11 +128,19 @@ export default function BookingsView() {
     return () => window.removeEventListener("refreshTripBookings", handleRefresh);
   }, []);
 
-  // Calculate Real Stats
-  const total = bookings.length;
-  const pending = bookings.filter(b => b.status === 'Pending' || b.status === 'Requested').length;
-  const confirmed = bookings.filter(b => b.status === 'Confirmed' || b.status === 'Approved').length;
-  const completed = bookings.filter(b => b.status === 'Completed').length;
+  // Hide completed trip requests for checked-out bookings
+  const visibleBookings = bookings.filter((b) => {
+    const bookingStatus = b.bookingId?.status;
+    const isTripCompleted = b.status === 'Completed';
+    const isBookingCheckedOut = bookingStatus === 'CheckedOut';
+    return !(isTripCompleted && isBookingCheckedOut);
+  });
+
+  // Calculate Real Stats from visible set
+  const total = visibleBookings.length;
+  const pending = visibleBookings.filter(b => b.status === 'Pending' || b.status === 'Requested').length;
+  const confirmed = visibleBookings.filter(b => b.status === 'Confirmed' || b.status === 'Approved').length;
+  const completed = visibleBookings.filter(b => b.status === 'Completed').length;
 
   const stats = [
     { label: "Total Bookings", value: total.toString() },
@@ -176,12 +184,12 @@ export default function BookingsView() {
       {/* Bookings List */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold text-gray-900">Trip Bookings</h3>
-        {bookings.length === 0 ? (
+        {visibleBookings.length === 0 ? (
              <div className="p-6 border border-dashed rounded-lg text-center text-gray-500 bg-gray-50">
                  No bookings found.
              </div>
         ) : (
-            bookings.map((booking) => {
+          visibleBookings.map((booking) => {
                 const canConfirm = ['Pending', 'Requested', 'Approved'].includes(booking.status);
                 const canCancel = !['Cancelled', 'Completed', 'Confirmed', 'Approved'].includes(booking.status);
                 const canComplete = booking.status === 'Confirmed' || booking.status === 'Approved';

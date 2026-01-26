@@ -56,6 +56,7 @@ const getBookingStatus = (status: string) => {
 export default function MyBookingsPage() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
   useEffect(() => {
     const fetchBookings = async () => {
@@ -63,15 +64,21 @@ export default function MyBookingsPage() {
         const user = auth.currentUser;
         if (!user) return;
         const token = await user.getIdToken();
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-        const response = await fetch(`${API_URL}/api/bookings`, {
+        // Fetch from dashboard endpoint which includes invoice totals
+        const response = await fetch(`${API_URL}/api/users/dashboard`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
         if (response.ok) {
           const data = await response.json();
-          setBookings(data);
+          // Combine active and completed bookings
+          const allBookings = [
+            ...(data.bookings || []),
+            ...(data.completedBookings || [])
+          ].sort((a, b) => new Date(b.checkIn).getTime() - new Date(a.checkIn).getTime());
+          
+          setBookings(allBookings);
         }
       } catch (error) {
         console.error("Error fetching bookings:", error);
@@ -149,11 +156,21 @@ export default function MyBookingsPage() {
                                 const StatusIcon = status.icon;
                                 const isCancellable = ["confirmed", "pending"].includes(booking.status.toLowerCase());
                                 
-                                // Calculate price if missing
+                                // Check if deal was applied
+                                const dealInfo = typeof booking.appliedDealId === 'object' ? booking.appliedDealId : null;
+                                const hasDiscount = booking.appliedDiscount && booking.appliedDiscount > 0;
+                                
+                                // Calculate price
                                 const checkIn = new Date(booking.checkIn);
                                 const checkOut = new Date(booking.checkOut);
                                 const nights = Math.ceil(Math.abs(checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)) || 1;
-                                const displayAmount = booking.totalAmount || (room?.rate ? room.rate * nights : 0);
+                                
+                                // Use appliedRate if available, otherwise use booking total or calculate from room rate
+                                const isCompleted = booking.status?.toLowerCase() === "checkedout" || 
+                                                   booking.status?.toLowerCase() === "checked-out";
+                                const displayAmount = isCompleted && booking.invoiceTotal 
+                                  ? booking.invoiceTotal 
+                                  : (booking.roomTotal || booking.totalAmount || (booking.appliedRate ? booking.appliedRate * nights : (room?.rate ? room.rate * nights : 0)));
 
                                 return (
                                     <tr key={booking._id} className="hover:bg-gray-50 transition-colors">
@@ -173,7 +190,26 @@ export default function MyBookingsPage() {
                                             {new Date(booking.checkOut).toLocaleDateString()}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                                            ${displayAmount}
+                                            {isCompleted && booking.invoiceTotal ? (
+                                              <div>
+                                                <div className="text-xs text-gray-500 font-normal">Total Paid</div>
+                                                <div>${displayAmount.toFixed(2)}</div>
+                                                {hasDiscount && dealInfo && (
+                                                  <div className="text-xs text-emerald-600 font-medium mt-0.5">
+                                                    {dealInfo.dealName} ({booking.appliedDiscount}% off)
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <div>
+                                                <div>${displayAmount.toFixed(2)}</div>
+                                                {hasDiscount && dealInfo && (
+                                                  <div className="text-xs text-emerald-600 font-medium mt-0.5">
+                                                    💰 {dealInfo.dealName}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.color}`}>

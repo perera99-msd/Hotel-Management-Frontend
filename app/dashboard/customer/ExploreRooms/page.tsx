@@ -7,7 +7,7 @@ import NewBookingModal from "../NewBooking/NewBookingModal";
 import { AuthContext } from "@/app/context/AuthContext";
 import { Loader2, Users, Bed, Check } from "lucide-react";
 
-// Matches your src/models/room.ts
+// Matches your src/models/room.ts + applicableRate from backend for this booking month
 interface Room {
   _id: string;
   roomNumber: string;
@@ -17,6 +17,8 @@ interface Room {
   amenities: string[];
   maxOccupancy: number;
   floor: number;
+  applicableRate?: number; // Rate for the booking month
+  bookingMonth?: number; // Month index (0-11)
 }
 
 export default function ExploreRoomsPage() {
@@ -179,7 +181,7 @@ export default function ExploreRoomsPage() {
                   
                   <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between">
                     <div>
-                        <span className="text-2xl font-bold text-gray-900">${room.rate}</span>
+                        <span className="text-2xl font-bold text-gray-900">${room.applicableRate || room.rate}</span>
                         <span className="text-sm font-normal text-gray-500 ml-1">/night</span>
                     </div>
                     <button

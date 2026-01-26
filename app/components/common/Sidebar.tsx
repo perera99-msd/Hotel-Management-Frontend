@@ -119,13 +119,13 @@ export default function Sidebar({
     <>
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/30 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/30 z-[998] lg:hidden"
           onClick={() => setSidebarOpen && setSidebarOpen(false)}
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white text-gray-900 shadow-lg border-r border-gray-200 flex flex-col transform transition-transform duration-300 ${
+        className={`fixed inset-y-0 left-0 z-[1000] w-64 bg-white text-gray-900 shadow-lg border-r border-gray-200 flex flex-col transform transition-transform duration-300 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0 lg:static lg:inset-auto`}
       >

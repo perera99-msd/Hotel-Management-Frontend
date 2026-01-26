@@ -72,6 +72,7 @@ export default function BookingList({
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Room</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-in</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-out</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
@@ -80,6 +81,11 @@ export default function BookingList({
             {bookings.map((booking) => {
               const guest = getGuestInfo(booking);
               const room = getRoomInfo(booking);
+
+              // Check for deal info
+              const dealInfo = typeof (booking as any).appliedDealId === 'object' ? (booking as any).appliedDealId : null;
+              const hasDiscount = (booking as any).appliedDiscount && (booking as any).appliedDiscount > 0;
+              const totalAmount = (booking as any).roomTotal || 0;
 
               let statusStyle = "bg-gray-100 text-gray-800";
               if (booking.status === 'Confirmed') statusStyle = "bg-green-100 text-green-800";
@@ -122,6 +128,16 @@ export default function BookingList({
                     <div className="text-sm text-gray-900">{new Date(booking.checkOut).toLocaleDateString()}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-semibold text-gray-900">
+                      ${totalAmount.toFixed(2)}
+                    </div>
+                    {hasDiscount && dealInfo && (
+                      <div className="text-xs text-emerald-600 font-medium mt-0.5">
+                        💰 {dealInfo.dealName} ({(booking as any).appliedDiscount}%)
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusStyle}`}>
                       {booking.status}
                     </span>
@@ -140,9 +156,11 @@ export default function BookingList({
                       )}
                       {booking.status === 'CheckedIn' && (
                         <>
-                          <button onClick={() => onExtend?.(booking)} className="text-blue-600 hover:text-blue-900" title="Extend Stay">
-                            <Clock className="h-4 w-4" />
-                          </button>
+                          {(booking as any).invoiceStatus !== 'paid' && (
+                            <button onClick={() => onExtend?.(booking)} className="text-blue-600 hover:text-blue-900" title="Extend Stay">
+                              <Clock className="h-4 w-4" />
+                            </button>
+                          )}
                           <button onClick={() => onCheckOut?.(booking)} className="text-orange-600 hover:text-orange-900" title="Check Out">
                             <LogOut className="h-4 w-4" />
                           </button>

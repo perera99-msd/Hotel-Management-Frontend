@@ -244,7 +244,7 @@ export default function Page() {
                 </div>
 
                 {/* Table */}
-                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-visible">
                     <div className="grid grid-cols-7 bg-gray-50 px-4 py-3 border-b border-gray-200">
                         <div className="text-sm font-medium text-gray-700">ID</div>
                         <div className="text-sm font-medium text-gray-700">Name</div>
@@ -263,7 +263,7 @@ export default function Page() {
                         <div className="py-8 text-center text-gray-500">No reservations found</div>
                     ) : (
                         paginatedReservations.map((reservation, index) => (
-                            <div key={reservation.mongoId} className="grid grid-cols-7 px-4 py-3 border-b border-gray-100 hover:bg-gray-50 relative items-center">
+                            <div key={reservation.mongoId} className="grid grid-cols-7 px-4 py-3 border-b border-gray-100 hover:bg-gray-50 items-center">
                                 <div className="text-sm font-medium text-gray-900">{reservation.id}</div>
                                 <div className="text-sm text-gray-700">{reservation.name}</div>
                                 <div className="text-sm text-gray-700">{reservation.roomNumber}</div>
@@ -274,13 +274,13 @@ export default function Page() {
                                         {reservation.status}
                                     </span>
                                 </div>
-                                <div className="relative">
+                                <div className="relative flex justify-end">
                                     <MoreVertical
-                                        onClick={() => setOpenMenu(openMenu === index ? null : index)}
+                                        onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === index ? null : index); }}
                                         className="h-5 w-5 text-gray-500 cursor-pointer hover:text-gray-700"
                                     />
                                     {openMenu === index && (
-                                        <div className="absolute right-6 top-6 w-32 bg-white shadow-lg rounded-md border border-gray-200 z-20">
+                                        <div className="absolute right-0 top-8 w-44 bg-white shadow-2xl rounded-lg border border-gray-200 z-50">
                                             <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => { handleViewGuest(reservation); setOpenMenu(null); }}>View</button>
                                             <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => { handleUpdateGuest(reservation); setOpenMenu(null); }}>Update</button>
                                             <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100" onClick={() => handleDelete(reservation.mongoId)}>Delete</button>

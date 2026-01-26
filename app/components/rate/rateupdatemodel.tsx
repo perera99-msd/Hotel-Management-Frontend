@@ -17,6 +17,7 @@ interface UpdateRateData {
   cancellationPolicy: string
   rooms: string
   price: string
+  roomIds?: string[]
 }
 
 export default function RateUpdateModel({ isOpen, onClose, onUpdate, rateData }: RateUpdateModelProps) {
@@ -26,23 +27,54 @@ export default function RateUpdateModel({ isOpen, onClose, onUpdate, rateData }:
     roomType: '',
     cancellationPolicy: '',
     rooms: '',
-    price: ''
+    price: '',
+    roomIds: []
   })
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [roomsList, setRoomsList] = useState<any[]>([])
+
+  const availableRooms = roomsList.filter((room) => (room.status || '').toLowerCase() === 'available')
 
   useEffect(() => {
     if (rateData) {
-      setFormData(rateData)
+      setFormData({ ...rateData, roomIds: rateData.roomIds || [] })
       setError(null)
     }
   }, [rateData])
+
+  useEffect(() => {
+    const fetchRooms = async () => {
+      if (!isOpen || !token) return
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/rooms`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setRoomsList(data || [])
+        }
+      } catch (err) {
+        console.error('Failed to fetch rooms', err)
+      }
+    }
+    fetchRooms()
+  }, [isOpen, token])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
     if (error) setError(null)
+  }
+
+  const handleRoomToggle = (roomId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      roomIds: prev.roomIds && prev.roomIds.includes(roomId)
+        ? prev.roomIds.filter(id => id !== roomId)
+        : [...(prev.roomIds || []), roomId]
+    }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -112,6 +144,32 @@ export default function RateUpdateModel({ isOpen, onClose, onUpdate, rateData }:
                 <option value="flexible">Flexible</option>
                 <option value="non-refundable">Non refundable</option>
               </select>
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Applicable rooms</label>
+              <div className="border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
+                {availableRooms.length === 0 && (
+                  <div className="px-3 py-2 text-sm text-gray-500">No available rooms right now</div>
+                )}
+                {availableRooms.map((room) => {
+                  const selected = Array.isArray(formData.roomIds) && formData.roomIds.includes(room._id)
+                  return (
+                    <label key={room._id} className="flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => handleRoomToggle(room._id)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-gray-800">Room {room.roomNumber} • {room.type}</span>
+                      </div>
+                      {selected && <span className="text-xs text-blue-600">Selected</span>}
+                    </label>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">Rate overrides will apply to these rooms first.</p>
             </div>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">Rooms</label>

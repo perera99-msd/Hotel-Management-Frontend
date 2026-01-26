@@ -52,7 +52,7 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
       // 1. Prepare Payload
-      // ✅ FIX: Included adults, children, and preferences in payload
+      // Simplified: only required fields
       const payload = {
         roomId: data.roomId,
         guestId: guestId,
@@ -61,8 +61,6 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
         status: "Confirmed",
         source: "Online",
         adults: data.bookingDetails.adults,
-        children: data.bookingDetails.children,
-        preferences: data.preferences
       };
 
       console.log("Booking Payload:", payload);
@@ -131,25 +129,31 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
       )}
 
       <div className="mb-6 space-y-4">
-        <h3 className="text-lg font-bold text-gray-800">Review Booking</h3>
+        <h3 className="text-lg font-bold text-gray-800">Review Your Booking</h3>
         
-        <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-                <p className="text-gray-500">Check-in</p>
-                <p className="font-medium">{formatDate(data.bookingDetails.checkIn)}</p>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <p className="text-gray-600 text-xs mb-1">Check-in</p>
+                    <p className="font-semibold text-gray-900">{formatDate(data.bookingDetails.checkIn)}</p>
+                </div>
+                <div>
+                    <p className="text-gray-600 text-xs mb-1">Check-out</p>
+                    <p className="font-semibold text-gray-900">{formatDate(data.bookingDetails.checkOut)}</p>
+                </div>
+                <div>
+                    <p className="text-gray-600 text-xs mb-1">Number of Adults</p>
+                    <p className="font-semibold text-gray-900">{data.bookingDetails.adults}</p>
+                </div>
+                <div>
+                    <p className="text-gray-600 text-xs mb-1">Room Rate</p>
+                    <p className="font-semibold text-gray-900">${data.roomRate?.toFixed(2) || "N/A"}/night</p>
+                </div>
             </div>
-            <div>
-                <p className="text-gray-500">Check-out</p>
-                <p className="font-medium">{formatDate(data.bookingDetails.checkOut)}</p>
-            </div>
-            <div>
-                <p className="text-gray-500">Room Type</p>
-                <p className="font-medium">{data.bookingDetails.roomType || "Standard"}</p>
-            </div>
-            <div>
-                <p className="text-gray-500">Guests</p>
-                <p className="font-medium">{data.bookingDetails.adults} Adults, {data.bookingDetails.children} Kids</p>
-            </div>
+        </div>
+
+        <div className="border-t pt-4">
+            <p className="text-xs text-gray-600 mb-2">Note: Any applicable deals will be automatically applied during booking creation.</p>
         </div>
       </div>
 

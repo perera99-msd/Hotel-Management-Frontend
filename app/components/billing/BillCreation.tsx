@@ -313,7 +313,6 @@ export default function BillCreation({
       };
 
       if (onCreateBill) onCreateBill(newBill);
-      toast.success(`Bill ${isEditMode ? 'updated' : 'created'} successfully!`);
       resetForm();
       onClose();
     } catch (error: any) {
@@ -381,11 +380,16 @@ export default function BillCreation({
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             >
               <option value="">Select Booking</option>
-              {filteredBookings.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.id}
-                </option>
-              ))}
+              {filteredBookings.map((b) => {
+                const bookingLabel = `${b.roomNumber ? `Room ${b.roomNumber}` : b.id}`;
+                const statusLabel = b.status ? ` • ${b.status}` : '';
+                const invoiceLabel = b.invoiceStatus ? ` • Invoice ${b.invoiceStatus}` : '';
+                return (
+                  <option key={b.id} value={b.id}>
+                    {bookingLabel}{statusLabel}{invoiceLabel}
+                  </option>
+                );
+              })}
             </select>
             {loadingItems && (
               <div className="flex items-center gap-2 mt-2 text-sm text-blue-600">

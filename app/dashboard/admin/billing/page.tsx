@@ -57,11 +57,12 @@ export default function Billing() {
         const bookRes = await fetch(`${API_URL}/api/bookings`, { headers });
         const bookData = await bookRes.json();
         if (Array.isArray(bookData)) {
-            setBookings(bookData.map((b: any) => ({
-                id: b._id,
-                guestId: b.guestId?._id || b.guestId, 
-                roomNumber: b.roomId?.roomNumber || "N/A"
-            })));
+          setBookings(bookData.map((b: any) => ({
+            id: b._id,
+            guestId: b.guestId?._id || b.guestId, 
+            roomNumber: b.roomId?.roomNumber || "N/A",
+            status: b.status
+          })));
         }
 
         // C. Fetch Invoices
@@ -90,6 +91,12 @@ export default function Billing() {
               paidAt: inv.paidAt ? new Date(inv.paidAt) : undefined
             }));
             setBills(mappedBills);
+
+            // Annotate bookings with invoice status for dropdown clarity
+            setBookings((prev) => prev.map((b) => {
+              const related = invData.find((inv: any) => (inv.bookingId?._id || inv.bookingId)?.toString() === b.id.toString());
+              return { ...b, invoiceStatus: related?.status };
+            }));
         }
 
       } catch (error) {

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Plus, CheckCircle, Users, Utensils, LucideIcon } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
 import NewBookingModal from "../../components/bookings/NewBookingModal";
 
 interface Action {
@@ -17,6 +18,11 @@ interface QuickActionsProps {
 
 export default function QuickActions({ actions }: QuickActionsProps) {
   const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Determine if we're in admin or receptionist dashboard
+  const dashboardRole = pathname.includes('/admin') ? 'admin' : 'receptionist';
 
   const handleNewBookingClick = () => {
     setIsNewBookingOpen(true);
@@ -24,6 +30,18 @@ export default function QuickActions({ actions }: QuickActionsProps) {
 
   const handleCloseModal = () => {
     setIsNewBookingOpen(false);
+  };
+
+  const handleCheckInClick = () => {
+    router.push(`/dashboard/${dashboardRole}/bookings`);
+  };
+
+  const handleRoomManagementClick = () => {
+    router.push(`/dashboard/${dashboardRole}/rooms`);
+  };
+
+  const handleNewOrderClick = () => {
+    router.push(`/dashboard/${dashboardRole}/dining`);
   };
 
   // Default actions if parent doesn't pass any
@@ -38,19 +56,19 @@ export default function QuickActions({ actions }: QuickActionsProps) {
       label: "Check-In",
       icon: CheckCircle,
       variant: "secondary",
-      onClick: () => console.log("CheckIn"),
+      onClick: handleCheckInClick,
     },
     {
       label: "Room Management",
       icon: Users,
       variant: "success",
-      onClick: () => console.log("Room"),
+      onClick: handleRoomManagementClick,
     },
     {
       label: "New Order",
       icon: Utensils,
       variant: "warning",
-      onClick: () => console.log("Order"),
+      onClick: handleNewOrderClick,
     },
   ];
 
@@ -100,7 +118,11 @@ export default function QuickActions({ actions }: QuickActionsProps) {
         isOpen={isNewBookingOpen}
         onClose={handleCloseModal}
         editingBooking={null}
-        onUpdateBooking={() => setIsNewBookingOpen(false)}
+        onUpdateBooking={() => {
+          setIsNewBookingOpen(false);
+          // Refresh the page to show updated stats
+          window.location.reload();
+        }}
       />
     </div>
   );

@@ -4,10 +4,9 @@
 import { useState, useEffect } from "react";
 import GuestInfo from "./GuestInfo";
 import BookingDetails from "./BookingDetails";
-import Preferences from "./Preferences";
 import Confirm from "./Confirm";
 
-// Update type to include roomId and price
+// Simplified to only required fields
 export type BookingData = {
   roomId?: string; 
   roomRate?: number;
@@ -18,17 +17,9 @@ export type BookingData = {
     phone: string;
   };
   bookingDetails: {
-    roomType: string;
     checkIn: string;
     checkOut: string;
     adults: number;
-    children: number;
-    rooms: number;
-  };
-  preferences: {
-    bedType: string;
-    mealPlan: string;
-    specialRequests: string;
   };
 };
 
@@ -50,7 +41,7 @@ export default function NewBookingModal({
   const [currentStep, setCurrentStep] = useState(1);
   const [bookingData, setBookingData] = useState<BookingData>({
     roomId: selectedRoom?._id || selectedRoom?.id || "",
-    roomRate: selectedRoom?.rate || 0,
+    roomRate: selectedRoom?.applicableRate || selectedRoom?.rate || 0, // Use applicableRate for the booking month
     guestInfo: {
       firstName: "",
       lastName: "",
@@ -58,17 +49,9 @@ export default function NewBookingModal({
       phone: "",
     },
     bookingDetails: {
-      roomType: selectedRoom?.type || "", // Pre-fill if room selected
       checkIn: defaultCheckIn,
       checkOut: defaultCheckOut,
       adults: 1,
-      children: 0,
-      rooms: 1,
-    },
-    preferences: {
-      bedType: "",
-      mealPlan: "Select an Option",
-      specialRequests: "",
     },
   });
 
@@ -107,8 +90,7 @@ export default function NewBookingModal({
   const steps = [
     { number: 1, title: "Guest Info", component: GuestInfo },
     { number: 2, title: "Booking Details", component: BookingDetails },
-    { number: 3, title: "Preferences", component: Preferences },
-    { number: 4, title: "Confirm", component: Confirm },
+    { number: 3, title: "Confirm", component: Confirm },
   ];
 
   const CurrentComponent = steps[currentStep - 1]?.component;

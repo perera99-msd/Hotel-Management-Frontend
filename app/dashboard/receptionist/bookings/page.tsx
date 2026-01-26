@@ -241,7 +241,7 @@ export default function Bookings() {
   };
 
   return (
-    <AdminReceptionistLayout>
+    <AdminReceptionistLayout role="receptionist">
       <div className="p-8 min-h-screen bg-gray-50">
         {/* Header with View Toggle and New Booking Button */}
         <div className="flex justify-between items-start mb-6">
