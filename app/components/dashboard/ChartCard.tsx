@@ -1,15 +1,16 @@
 import React from "react";
 import {
-  BarChart,
   Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts";
 
 interface ChartCardProps {
@@ -32,7 +33,7 @@ export default function ChartCard({
   return (
     <div className="bg-white shadow rounded-lg p-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
-      <div className="h-64">
+      <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           {type === "bar" ? (
             <BarChart data={data}>
@@ -54,13 +55,14 @@ export default function ChartCard({
             <PieChart>
               <Pie
                 data={data}
-                cx="50%"
+                cx="45%"
                 cy="50%"
-                labelLine={false}
-                label={({ name, percent }) =>
-                  `${name} ${(Number(percent ?? 0) * 100).toFixed(0)}%`
-                }
-                outerRadius={80}
+                labelLine={true}
+                label={({ name, percent }) => {
+                  const percentage = (Number(percent ?? 0) * 100).toFixed(0);
+                  return `${percentage}%`;
+                }}
+                outerRadius={70}
                 fill={colors[0]}
                 dataKey={dataKey}
               >
@@ -71,12 +73,24 @@ export default function ChartCard({
                   />
                 ))}
               </Pie>
+              <Legend
+                verticalAlign="middle"
+                align="right"
+                layout="vertical"
+                wrapperStyle={{ paddingLeft: "20px" }}
+                iconType="square"
+              />
               <Tooltip
                 contentStyle={{
                   backgroundColor: "#ffffff",
                   borderRadius: "8px",
                   borderColor: "#e5e7eb",
+                  padding: "8px 12px",
                 }}
+                formatter={(value) => [
+                  typeof value === "number" ? value.toLocaleString() : value,
+                  "Count",
+                ]}
               />
             </PieChart>
           )}

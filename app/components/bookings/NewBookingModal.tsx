@@ -76,7 +76,7 @@ export default function NewBookingModal({
   const [calculatedBreakdown, setCalculatedBreakdown] = useState<any>(null);
   const [isLoadingCalculation, setIsLoadingCalculation] = useState(false);
 
-  const [newGuest, setNewGuest] = useState({ name: "", email: "", phone: "" });
+  const [newGuest, setNewGuest] = useState({ name: "", email: "", phone: "", idNumber: "", password: "" });
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -147,7 +147,7 @@ export default function NewBookingModal({
     } else if (!isOpen) {
       setFormData({ roomId: "", checkIn: "", checkOut: "", guestId: "" });
       setSearchQuery("");
-      setNewGuest({ name: "", email: "", phone: "" });
+      setNewGuest({ name: "", email: "", phone: "", idNumber: "", password: "" });
       setAvailableRooms([]);
       setActiveTab('search');
     }
@@ -260,8 +260,13 @@ export default function NewBookingModal({
       return;
     }
 
-    if (isNewGuest && (!newGuest.name || !newGuest.email)) {
-      toast.error("Name and Email are required for new guests");
+    if (isNewGuest && (!newGuest.name || !newGuest.email || !newGuest.phone || !newGuest.idNumber || !newGuest.password)) {
+      toast.error("All guest fields are required (Name, Email, Phone, Identity Number, Password)");
+      return;
+    }
+
+    if (isNewGuest && newGuest.password.length < 6) {
+      toast.error("Password must be at least 6 characters");
       return;
     }
 
@@ -326,7 +331,14 @@ export default function NewBookingModal({
       });
 
       if (res.ok) {
-        toast.success(isEdit ? "Booking updated" : "Booking created successfully");
+        if (isNewGuest) {
+          toast.success(
+            `Booking created! Password: ${newGuest.password}\n\nShare this with the guest.`,
+            { duration: 10 }
+          );
+        } else {
+          toast.success(isEdit ? "Booking updated" : "Booking created successfully");
+        }
         if (onUpdateBooking) onUpdateBooking();
         onClose();
       } else {
@@ -642,26 +654,98 @@ export default function NewBookingModal({
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg border">
-                <input
-                  placeholder="Full Name *"
-                  className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={newGuest.name}
-                  onChange={(e) => setNewGuest({ ...newGuest, name: e.target.value })}
-                />
-                <input
-                  placeholder="Email Address *"
-                  className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={newGuest.email}
-                  onChange={(e) => setNewGuest({ ...newGuest, email: e.target.value })}
-                />
-                <input
-                  placeholder="Phone Number"
-                  className="sm:col-span-2 w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={newGuest.phone}
-                  onChange={(e) => setNewGuest({ ...newGuest, phone: e.target.value })}
-                />
-                <p className="text-xs text-gray-500 sm:col-span-2 mt-1">* Required fields</p>
+              <div className="space-y-4">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="bg-blue-600 p-2 rounded-lg">
+                      <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-bold text-gray-900 mb-1">New Guest Registration</h4>
+                      <p className="text-xs text-gray-600">Create a new guest profile for this booking</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-700 mb-2">Full Name *</label>
+                      <input
+                        type="text"
+                        placeholder="Enter guest's full name"
+                        className="w-full border border-gray-300 bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                        value={newGuest.name}
+                        onChange={(e) => setNewGuest({ ...newGuest, name: e.target.value })}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-2">Email Address *</label>
+                      <input
+                        type="email"
+                        placeholder="guest@example.com"
+                        className="w-full border border-gray-300 bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                        value={newGuest.email}
+                        onChange={(e) => setNewGuest({ ...newGuest, email: e.target.value })}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-2">Phone Number *</label>
+                      <input
+                        type="tel"
+                        placeholder="+1 234 567 8900"
+                        className="w-full border border-gray-300 bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                        value={newGuest.phone}
+                        onChange={(e) => setNewGuest({ ...newGuest, phone: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-700 mb-2">Identity Number (Passport / NIC) *</label>
+                      <input
+                        type="text"
+                        placeholder="Passport number or National ID"
+                        className="w-full border border-gray-300 bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                        value={newGuest.idNumber}
+                        onChange={(e) => setNewGuest({ ...newGuest, idNumber: e.target.value })}
+                      />
+                      <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1">
+                        <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        Required for verification and check-in
+                      </p>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-gray-700 mb-2">Password *</label>
+                      <input
+                        type="password"
+                        placeholder="Set a password for this guest"
+                        className="w-full border border-gray-300 bg-white rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                        value={newGuest.password}
+                        onChange={(e) => setNewGuest({ ...newGuest, password: e.target.value })}
+                      />
+                      <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1">
+                        <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                        Minimum 6 characters. Share with the guest after booking
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-blue-200">
+                    <p className="text-xs text-gray-600 flex items-center gap-1">
+                      <svg className="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      All fields marked with * are required
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
