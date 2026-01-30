@@ -1,21 +1,21 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
-import NewBookingModal from "../../../components/bookings/NewBookingModal";
-import ExtendStayModal from "../../../components/bookings/ExtendStayModal";
-import BookingCalendar from "../../../components/bookings/BookingCalendar";
-import BookingList from "../../../components/bookings/BookingList";
+import { auth } from "@/app/lib/firebase";
 import {
   Calendar,
   CheckCircle,
+  List,
+  LogOut,
   UserCheck,
   Users,
-  LogOut,
-  List,
 } from "lucide-react";
-import { auth } from "@/app/lib/firebase";
+import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import BookingCalendar from "../../../components/bookings/BookingCalendar";
+import BookingList from "../../../components/bookings/BookingList";
+import ExtendStayModal from "../../../components/bookings/ExtendStayModal";
+import NewBookingModal from "../../../components/bookings/NewBookingModal";
+import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 
 // Matches Backend Response Structure
 export interface Booking {
@@ -43,7 +43,7 @@ export interface Booking {
 export default function Bookings() {
   const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
-  
+
   // Data State
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,7 +67,7 @@ export default function Bookings() {
         // Map _id to id for frontend compatibility
         const mappedData = data.map((b: any) => ({
           ...b,
-          id: b._id, 
+          id: b._id,
         }));
         setBookings(mappedData);
       } else {
@@ -95,11 +95,11 @@ export default function Bookings() {
   // --- 2. STATS CALCULATION ---
   const getBookingStats = () => {
     const today = new Date();
-    
+
     // Helper to check if dates match (ignoring time)
-    const isSameDate = (d1: Date, d2: Date) => 
-      d1.getDate() === d2.getDate() && 
-      d1.getMonth() === d2.getMonth() && 
+    const isSameDate = (d1: Date, d2: Date) =>
+      d1.getDate() === d2.getDate() &&
+      d1.getMonth() === d2.getMonth() &&
       d1.getFullYear() === d2.getFullYear();
 
     const todayCheckIns = bookings.filter((b) => {
@@ -141,7 +141,7 @@ export default function Bookings() {
 
   // Called when Modal saves successfully (Create or Update)
   const handleUpdateSuccess = () => {
-    fetchBookings(); 
+    fetchBookings();
     setIsNewBookingOpen(false);
     setEditingBooking(null);
   };
@@ -160,60 +160,77 @@ export default function Bookings() {
       });
 
       if (res.ok) {
-        toast.success("Guest Checked In");
+        toast.success("Guest Checked In Successfully");
         fetchBookings();
       } else {
         const err = await res.json();
         toast.error(err.error || "Check-in failed");
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      toast.error("Error during check-in");
+    }
   };
 
   // Check Out Handler (API)
   const handleCheckOut = async (booking: Booking) => {
     try {
-        const user = auth.currentUser;
-        if (!user) return;
-        const token = await user.getIdToken();
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-  
-        const res = await fetch(`${API_URL}/api/bookings/${booking.id}/checkout`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` }
-        });
-  
-        if (res.ok) {
-          toast.success("Guest Checked Out");
-          fetchBookings();
-        } else {
-          const err = await res.json();
-          toast.error(err.error || "Check-out failed");
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+      const res = await fetch(`${API_URL}/api/bookings/${booking.id}/checkout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        toast.success("Guest Checked Out Successfully");
+        // Refetch bookings immediately, then again after small delay to ensure all updates propagate
+        await fetchBookings();
+        setTimeout(() => fetchBookings(), 800);
+      } else {
+        const errText = await res.text();
+        try {
+          const err = JSON.parse(errText);
+          toast.error(err.error || `Check-out failed: ${res.status}`);
+        } catch {
+          toast.error(`Check-out failed: ${res.status} ${res.statusText}`);
         }
-      } catch (e) { console.error(e); }
+      }
+    } catch (e) {
+      console.error("Checkout error:", e);
+      toast.error("Check-out error - please try again");
+    }
   };
 
   // Cancel Handler (API)
   const handleCancelBooking = async (booking: Booking) => {
-    if(!confirm("Are you sure you want to cancel this booking?")) return;
-    
+    if (!confirm("Are you sure you want to cancel this booking?")) return;
+
     try {
-        const user = auth.currentUser;
-        if (!user) return;
-        const token = await user.getIdToken();
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-  
-        const res = await fetch(`${API_URL}/api/bookings/${booking.id}`, {
-          method: "DELETE", 
-          headers: { Authorization: `Bearer ${token}` }
-        });
-  
-        if (res.ok) {
-          toast.success("Booking Cancelled");
-          fetchBookings();
-        } else {
-          toast.error("Cancellation failed");
-        }
-      } catch (e) { console.error(e); }
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+      const res = await fetch(`${API_URL}/api/bookings/${booking.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        toast.success("Booking Cancelled Successfully");
+        fetchBookings();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || "Cancellation failed");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Error cancelling booking");
+    }
   };
 
   const handleExtendStay = (booking: Booking) => {
@@ -258,22 +275,20 @@ export default function Bookings() {
             <div className="flex bg-gray-100 rounded-lg p-1">
               <button
                 onClick={() => setViewMode("calendar")}
-                className={`p-2 rounded transition-all duration-200 ${
-                  viewMode === "calendar"
+                className={`p-2 rounded transition-all duration-200 ${viewMode === "calendar"
                     ? "bg-white shadow-sm text-blue-600"
                     : "text-gray-500 hover:text-gray-700"
-                }`}
+                  }`}
                 title="Calendar View"
               >
                 <Calendar className="h-4 w-4" />
               </button>
               <button
                 onClick={() => setViewMode("list")}
-                className={`p-2 rounded transition-all duration-200 ${
-                  viewMode === "list"
+                className={`p-2 rounded transition-all duration-200 ${viewMode === "list"
                     ? "bg-white shadow-sm text-blue-600"
                     : "text-gray-500 hover:text-gray-700"
-                }`}
+                  }`}
                 title="List View"
               >
                 <List className="h-4 w-4" />
@@ -350,7 +365,7 @@ export default function Bookings() {
         {/* Dynamic Content */}
         <div className="max-w-8xl mx-auto">
           {loading ? (
-             <div className="text-center py-12">Loading...</div>
+            <div className="text-center py-12">Loading...</div>
           ) : viewMode === "calendar" ? (
             <BookingCalendar
               bookings={bookings}

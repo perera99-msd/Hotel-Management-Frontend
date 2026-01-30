@@ -28,7 +28,7 @@ export default function AdminReceptionistLayout({
           dashboardType={role}
           onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
         />
-        <main className="flex-1 p-4 sm:p-6 bg-gray-50">{children}</main>
+        <main className="flex-1 relative bg-gray-50">{children}</main>
       </div>
     </div>
   );

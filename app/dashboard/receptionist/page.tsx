@@ -61,19 +61,44 @@ const Dashboard: React.FC = () => {
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
         const headers = { 'Authorization': `Bearer ${token}` };
 
-        // Fetch dashboard data
-        const dashboardRes = await fetch(`${API_URL}/api/reports/dashboard`, { headers });
-        const dashboardData = await dashboardRes.json();
+        // Fetch all data in parallel
+        const [dashboardRes, invoicesRes, ordersRes, inventoryRes] = await Promise.all([
+          fetch(`${API_URL}/api/reports/dashboard`, { headers }),
+          fetch(`${API_URL}/api/invoices`, { headers }),
+          fetch(`${API_URL}/api/orders`, { headers }),
+          fetch(`${API_URL}/api/inventory`, { headers })
+        ]);
 
-        // Fetch invoices to calculate real revenue
-        const invoicesRes = await fetch(`${API_URL}/api/invoices`, { headers });
+        const dashboardData = await dashboardRes.json();
         const invoicesData = await invoicesRes.json();
+        const ordersData = await ordersRes.json();
+        const inventoryData = await inventoryRes.json();
 
         if (dashboardRes.ok) {
-          const { metrics, roomStatus } = dashboardData;
+          const { metrics, roomStatus, occupancyData: backendOccupancyData } = dashboardData;
 
           // Calculate Cleaning Rooms (Available Dirty + Occupied Dirty)
           const cleaningCount = (roomStatus?.available?.dirty || 0) + (roomStatus?.occupied?.dirty || 0);
+
+          // Calculate today's orders count
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const todayOrders = Array.isArray(ordersData)
+            ? ordersData.filter((order: any) => {
+              const orderDate = new Date(order.createdAt);
+              orderDate.setHours(0, 0, 0, 0);
+              return orderDate.getTime() === today.getTime() &&
+                order.status !== 'Cancelled' &&
+                order.status !== 'Served';
+            }).length
+            : 0;
+
+          // Calculate low stock items (items with quantity below reorder level)
+          const lowStockCount = Array.isArray(inventoryData)
+            ? inventoryData.filter((item: any) =>
+              item.quantity <= (item.reorderLevel || 10)
+            ).length
+            : 0;
 
           // Calculate real revenue from paid invoices
           let totalRevenue = 0;
@@ -83,6 +108,31 @@ const Dashboard: React.FC = () => {
               .reduce((sum: number, inv: any) => sum + (inv.total || 0), 0);
           }
 
+          // Calculate monthly revenue trend (last 6 months)
+          const revenueByMonth: { [key: string]: number } = {};
+          if (Array.isArray(invoicesData)) {
+            invoicesData.forEach((inv: any) => {
+              if (inv.status === 'paid' && inv.createdAt) {
+                const date = new Date(inv.createdAt);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                revenueByMonth[monthKey] = (revenueByMonth[monthKey] || 0) + (inv.total || 0);
+              }
+            });
+          }
+
+          // Get last 6 months in order
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const revenueChartData = [];
+          for (let i = 5; i >= 0; i--) {
+            const date = new Date();
+            date.setMonth(date.getMonth() - i);
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            revenueChartData.push({
+              name: monthNames[date.getMonth()],
+              value: revenueByMonth[monthKey] || 0
+            });
+          }
+
           setStats({
             totalRooms: (metrics?.totalAvailableRoom || 0) + (metrics?.totalOccupiedRoom || 0) + cleaningCount + (roomStatus?.available?.inspected || 0),
             availableRooms: metrics?.totalAvailableRoom || 0,
@@ -90,8 +140,8 @@ const Dashboard: React.FC = () => {
             cleaningRooms: cleaningCount,
             todayCheckIns: metrics?.todayCheckIns || 0,
             todayCheckOuts: metrics?.todayCheckOuts || 0,
-            todayOrders: 0,
-            lowStockItems: 0,
+            todayOrders: todayOrders,
+            lowStockItems: lowStockCount,
             occupancyRate: metrics?.totalInHotel ? Math.round((metrics.totalInHotel / ((metrics?.totalAvailableRoom || 0) + (metrics?.totalOccupiedRoom || 0)) * 100)) : 0,
             revenue: totalRevenue,
           });
@@ -103,6 +153,17 @@ const Dashboard: React.FC = () => {
             { name: "Cleaning", value: cleaningCount },
             { name: "Maintenance", value: (roomStatus?.available?.inspected || 0) },
           ]);
+
+          // Set occupancy data from backend (last 6 months)
+          if (backendOccupancyData && Array.isArray(backendOccupancyData)) {
+            setOccupancyData(backendOccupancyData.map((item: any) => ({
+              name: item.name,
+              value: item.percentage
+            })));
+          }
+
+          // Set revenue trend data
+          setRevenueData(revenueChartData);
 
           setRecentActivity(dashboardData.recentActivity || []);
         }
