@@ -16,6 +16,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
     name: "",
     email: "",
     phone: "",
+    idNumber: "",
     password: "",
     confirmPassword: "",
   });
@@ -31,10 +32,10 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const { name, email, phone, password, confirmPassword } = formData;
+    const { name, email, phone, idNumber, password, confirmPassword } = formData;
 
-    if (!name || !email || !password || !confirmPassword) {
-      toast.error("Please fill in all required fields");
+    if (!name || !email || !idNumber || !password || !confirmPassword) {
+      toast.error("Please fill in all required fields (Name, Email, NIC/Passport, Password)");
       return;
     }
 
@@ -73,7 +74,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
           uid: user.uid, // <--- CRITICAL FIX
           name: name,
           email: email,
-          phone: phone
+          phone: phone,
+          idNumber: idNumber
         })
       });
 
@@ -158,6 +160,25 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
               onChange={handleChange}
               placeholder="Enter your phone"
               className="w-full border rounded-lg py-3 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* NIC/Passport Number */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            NIC / Passport Number <span className="text-red-500">*</span>
+          </label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <input
+              type="text"
+              name="idNumber"
+              value={formData.idNumber}
+              onChange={handleChange}
+              placeholder="Enter your NIC or Passport number"
+              className="w-full border rounded-lg py-3 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
             />
           </div>
         </div>

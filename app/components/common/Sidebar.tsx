@@ -110,10 +110,12 @@ export default function Sidebar({
       { name: "Front desk", href: "/dashboard/receptionist/frontdesk", icon: UserCheck, badge: null },
       { name: "Rooms", href: "/dashboard/receptionist/rooms", icon: Bed, badge: null },
       { name: "Bookings", href: "/dashboard/receptionist/bookings", icon: Calendar, badge: null },
+      { name: "Guests", href: "/dashboard/receptionist/guests", icon: UserIcon, badge: null },
       { name: "Dining", href: "/dashboard/receptionist/dining", icon: Utensils, badge: null },
       { name: "Trip Packages", href: "/dashboard/receptionist/trip-packages", icon: Navigation, badge: null },
       { name: "Billing", href: "/dashboard/receptionist/billing", icon: FileText, badge: null },
       { name: "Feedback", href: "/dashboard/receptionist/feedback", icon: MessageSquare, badge: null },
+      { name: "Settings", href: "/dashboard/receptionist/settings", icon: Settings, badge: null },
     ],
   };
 

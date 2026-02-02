@@ -1,10 +1,10 @@
 // app/dashboard/customer/Profile/page.tsx
 "use client";
 
-import { useState, useEffect, useContext } from "react";
+import { AuthContext } from "@/app/context/AuthContext";
+import { useContext, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import CustomerLayout from "../../../components/layout/CustomerLayout";
-import { AuthContext } from "@/app/context/AuthContext";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -13,6 +13,7 @@ interface UserProfile {
   name: string;
   email: string;
   phone: string;
+  idNumber?: string;
   roles: string[];
   createdAt: string;
 }
@@ -25,6 +26,7 @@ export default function ProfilePage() {
     name: "",
     email: "",
     phone: "",
+    idNumber: "",
   });
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export default function ProfilePage() {
         name: profile.name || "",
         email: profile.email || "",
         phone: profile.phone || "",
+        idNumber: profile.idNumber || "",
       });
       setIsLoading(false);
     } else if (user) {
@@ -40,12 +43,13 @@ export default function ProfilePage() {
         name: user.displayName || "",
         email: user.email || "",
         phone: user.phoneNumber || "",
+        idNumber: "",
       });
       setIsLoading(false);
     } else {
-        // If auth is done loading but no user, stop loading spinner to show login message
-        const timer = setTimeout(() => setIsLoading(false), 1000);
-        return () => clearTimeout(timer);
+      // If auth is done loading but no user, stop loading spinner to show login message
+      const timer = setTimeout(() => setIsLoading(false), 1000);
+      return () => clearTimeout(timer);
     }
   }, [profile, user]);
 
@@ -66,6 +70,7 @@ export default function ProfilePage() {
         body: JSON.stringify({
           name: formData.name,
           phone: formData.phone,
+          idNumber: formData.idNumber,
         }),
       });
 
@@ -75,7 +80,7 @@ export default function ProfilePage() {
 
       // Update the global auth context with new data
       await refreshProfile();
-      
+
       toast.success("Profile updated successfully!");
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -158,6 +163,19 @@ export default function ProfilePage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-black mb-1">
+                NIC / Passport Number
+              </label>
+              <input
+                type="text"
+                value={formData.idNumber}
+                onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })}
+                placeholder="National ID or Passport number"
+                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                disabled={isSaving}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-black mb-1">
                 Member Since
               </label>
               <input
@@ -175,10 +193,10 @@ export default function ProfilePage() {
               className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
               {isSaving && (
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                  </svg>
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
               )}
               {isSaving ? "Saving Changes..." : "Save Changes"}
             </button>

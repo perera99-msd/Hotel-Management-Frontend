@@ -1,11 +1,13 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { X, Save } from "lucide-react";
+import { Save, X } from "lucide-react";
+import React, { useEffect, useState } from "react";
 
 interface AddUserFormProps {
   onAddUser: (user: {
     name: string;
     email: string;
+    phone?: string;
+    idNumber?: string;
     role: string;
     status: string;
   }) => void;
@@ -13,6 +15,8 @@ interface AddUserFormProps {
     id: string;
     name: string;
     email: string;
+    phone?: string;
+    idNumber?: string;
     role: string;
     status: string;
   }) => void;
@@ -21,6 +25,8 @@ interface AddUserFormProps {
     id: string;
     name: string;
     email: string;
+    phone?: string;
+    idNumber?: string;
     role: string;
     status: string;
   } | null;
@@ -36,6 +42,8 @@ export default function AddUserForm({
     id: "",
     name: "",
     email: "",
+    phone: "",
+    idNumber: "",
     role: "",
     status: "active",
   });
@@ -108,11 +116,10 @@ export default function AddUserForm({
             type="text"
             value={formData.name}
             onChange={(e) => handleChange("name", e.target.value)}
-            className={`w-full border rounded-lg px-3 py-2 text-gray-700 focus:outline-none ${
-              errors.name
+            className={`w-full border rounded-lg px-3 py-2 text-gray-700 focus:outline-none ${errors.name
                 ? "border-red-500 focus:ring-red-500 focus:border-red-500"
                 : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-            }`}
+              }`}
           />
           {errors.name && (
             <p className="text-sm text-red-600 mt-1">{errors.name}</p>
@@ -128,15 +135,41 @@ export default function AddUserForm({
             type="email"
             value={formData.email}
             onChange={(e) => handleChange("email", e.target.value)}
-            className={`w-full border rounded-lg px-3 py-2 text-gray-700 focus:outline-none ${
-              errors.email
+            className={`w-full border rounded-lg px-3 py-2 text-gray-700 focus:outline-none ${errors.email
                 ? "border-red-500 focus:ring-red-500 focus:border-red-500"
                 : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-            }`}
+              }`}
           />
           {errors.email && (
             <p className="text-sm text-red-600 mt-1">{errors.email}</p>
           )}
+        </div>
+
+        {/* Phone */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Phone Number
+          </label>
+          <input
+            type="tel"
+            value={formData.phone}
+            onChange={(e) => handleChange("phone", e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+
+        {/* NIC/Passport */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            NIC / Passport Number {!existingUser && <span className="text-red-500">*</span>}
+          </label>
+          <input
+            type="text"
+            value={formData.idNumber}
+            onChange={(e) => handleChange("idNumber", e.target.value)}
+            placeholder="National ID or Passport number"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
         </div>
 
         {/* Role */}
@@ -147,11 +180,10 @@ export default function AddUserForm({
           <select
             value={formData.role}
             onChange={(e) => handleChange("role", e.target.value)}
-            className={`w-full border rounded-lg px-3 py-2 text-gray-700 focus:outline-none ${
-              errors.role
+            className={`w-full border rounded-lg px-3 py-2 text-gray-700 focus:outline-none ${errors.role
                 ? "border-red-500 focus:ring-red-500 focus:border-red-500"
                 : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-            }`}
+              }`}
           >
             <option value="">Select Role</option>
             <option value="admin">Admin</option>

@@ -24,6 +24,8 @@ export default function UsersTab() {
           id: u._id,
           name: u.name,
           email: u.email,
+          phone: u.phone || '',
+          idNumber: u.idNumber || '',
           role: u.roles?.[0] || 'customer',
           status: u.status || 'active'
         })));
@@ -115,12 +117,13 @@ export default function UsersTab() {
         ) : (
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
-              <tr>{["User", "Role", "Status", "Actions"].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">{h}</th>)}</tr>
+              <tr>{["User", "NIC/ID", "Role", "Status", "Actions"].map(h => <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase">{h}</th>)}</tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
               {users.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4"><div>{user.name}</div><div className="text-sm text-gray-500">{user.email}</div></td>
+                  <td className="px-6 py-4 text-sm text-gray-700">{user.idNumber || 'N/A'}</td>
                   <td className="px-6 py-4 capitalize">{user.role}</td>
                   <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs ${user.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"}`}>{user.status}</span></td>
                   <td className="px-6 py-4 flex space-x-3">
