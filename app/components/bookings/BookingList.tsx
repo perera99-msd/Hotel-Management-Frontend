@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, UserCheck, LogOut, Bed, Edit, XCircle, Clock } from "lucide-react";
+import { Bed, Calendar, Clock, Edit, LogOut, UserCheck, XCircle } from "lucide-react";
 
 // Redefined locally to avoid circular dependencies with page.tsx
 interface Booking {
@@ -116,8 +116,17 @@ export default function BookingList({
                     <div className="flex items-center">
                       <Bed className="h-4 w-4 text-gray-400 mr-2" />
                       <div>
-                        <div className="text-sm font-medium text-gray-900">Room {room.number}</div>
-                        <div className="text-xs text-gray-500 capitalize">{room.type}</div>
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">Room {room.number}</div>
+                            <div className="text-xs text-gray-500 capitalize">{room.type}</div>
+                          </div>
+                          {(booking as any).shortStay && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200 whitespace-nowrap">
+                              Short Stay
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </td>

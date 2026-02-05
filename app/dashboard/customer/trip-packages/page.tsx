@@ -114,23 +114,23 @@ export default function CustomerTripPackages() {
 
     return (
         <CustomerLayout>
-            <div className="space-y-6 p-6">
-                <div className="flex items-center justify-between">
+            <div className="space-y-4 sm:space-y-6 p-3 sm:p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Explore Trip Packages</h1>
-                        <p className="text-muted-foreground mt-2">
+                        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight">Explore Trip Packages</h1>
+                        <p className="text-muted-foreground mt-1 sm:mt-2 text-sm sm:text-base">
                             Discover curated experiences and adventures tailored just for you.
                         </p>
                     </div>
                     <button
                         onClick={() => setIsCustomTripModalOpen(true)}
-                        className="bg-black text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors"
+                        className="bg-black text-white px-4 py-2.5 rounded-lg hover:bg-gray-800 transition-colors text-sm sm:text-base whitespace-nowrap w-full sm:w-auto"
                     >
                         Request Custom Trip
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     {packages.length === 0 ? (
                         <div className="col-span-full text-center py-12">
                             <p className="text-muted-foreground text-lg">No active packages available at the moment.</p>
@@ -142,7 +142,7 @@ export default function CustomerTripPackages() {
                                 className="group flex flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300"
                             >
                                 {/* Image Section */}
-                                <div className="relative h-48 w-full overflow-hidden">
+                                <div className="relative h-40 sm:h-48 w-full overflow-hidden">
                                     <img
                                         src={getPackageImage(pkg)}
                                         alt={pkg.name}
@@ -152,25 +152,25 @@ export default function CustomerTripPackages() {
                                             (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80";
                                         }}
                                     />
-                                    <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-bold shadow-sm">
+                                    <div className="absolute top-2 right-2 sm:top-3 sm:right-3 bg-white/90 backdrop-blur-sm px-2 py-1 sm:px-3 sm:py-1 rounded-full text-xs sm:text-sm font-bold shadow-sm">
                                         ${pkg.price.toLocaleString()}
                                     </div>
-                                    <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md text-white px-3 py-1 rounded-full text-xs flex items-center gap-1">
+                                    <div className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 bg-black/60 backdrop-blur-md text-white px-2 py-1 sm:px-3 sm:py-1 rounded-full text-xs flex items-center gap-1">
                                         <MapPin className="h-3 w-3" />
                                         {pkg.location}
                                     </div>
                                 </div>
 
                                 {/* Content Section */}
-                                <div className="flex flex-col flex-grow p-5">
-                                    <h3 className="text-xl font-bold mb-2 group-hover:text-blue-600 transition-colors">
+                                <div className="flex flex-col flex-grow p-3 sm:p-5">
+                                    <h3 className="text-lg sm:text-xl font-bold mb-2 group-hover:text-blue-600 transition-colors">
                                         {pkg.name}
                                     </h3>
-                                    <p className="text-gray-600 text-sm line-clamp-2 mb-4 flex-grow">
+                                    <p className="text-gray-600 text-xs sm:text-sm line-clamp-2 mb-3 sm:mb-4 flex-grow">
                                         {pkg.description}
                                     </p>
 
-                                    <div className="grid grid-cols-2 gap-y-2 gap-x-4 mb-4 text-sm text-gray-500">
+                                    <div className="grid grid-cols-2 gap-y-2 gap-x-2 sm:gap-x-4 mb-3 sm:mb-4 text-xs sm:text-sm text-gray-500">
                                         <div className="flex items-center gap-2">
                                             <Clock className="h-4 w-4 text-blue-500" />
                                             <span>{pkg.duration}</span>
@@ -191,7 +191,7 @@ export default function CustomerTripPackages() {
 
                                     <button
                                         onClick={() => handleBookClick(pkg)}
-                                        className="w-full mt-auto bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                        className="w-full mt-auto bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 sm:py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
                                     >
                                         Book This Trip
                                     </button>

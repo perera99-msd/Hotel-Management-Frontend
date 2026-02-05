@@ -117,52 +117,52 @@ export default function ProfilePage() {
 
   return (
     <CustomerLayout>
-      <div className="space-y-6 p-6">
+      <div className="space-y-4 sm:space-y-6 p-3 sm:p-6">
         <div>
-          <h2 className="text-2xl font-bold text-black mb-2">My Profile</h2>
-          <p className="text-black">Manage your account information</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-black mb-1 sm:mb-2">My Profile</h2>
+          <p className="text-sm sm:text-base text-black">Manage your account information</p>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6 max-w-2xl">
-          <h3 className="text-lg font-semibold text-black mb-4">Personal Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg sm:rounded-xl border border-gray-200 p-4 sm:p-6 max-w-2xl">
+          <h3 className="text-base sm:text-lg font-semibold text-black mb-3 sm:mb-4">Personal Information</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div>
-              <label className="block text-sm font-medium text-black mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-black mb-1">
                 Full Name
               </label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black text-sm sm:text-base"
                 disabled={isSaving}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-black mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-black mb-1">
                 Email
               </label>
               <input
                 type="email"
                 value={formData.email}
                 readOnly
-                className="w-full border border-gray-300 rounded px-3 py-2 bg-gray-50 text-black cursor-not-allowed"
+                className="w-full border border-gray-300 rounded px-3 py-2 bg-gray-50 text-black cursor-not-allowed text-sm sm:text-base"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-black mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-black mb-1">
                 Phone
               </label>
               <input
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black text-sm sm:text-base"
                 disabled={isSaving}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-black mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-black mb-1">
                 NIC / Passport Number
               </label>
               <input
@@ -170,27 +170,27 @@ export default function ProfilePage() {
                 value={formData.idNumber}
                 onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })}
                 placeholder="National ID or Passport number"
-                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black text-sm sm:text-base"
                 disabled={isSaving}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-black mb-1">
+              <label className="block text-xs sm:text-sm font-medium text-black mb-1">
                 Member Since
               </label>
               <input
                 type="text"
                 value={profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "N/A"}
                 readOnly
-                className="w-full border border-gray-300 rounded px-3 py-2 bg-gray-50 text-black cursor-not-allowed"
+                className="w-full border border-gray-300 rounded px-3 py-2 bg-gray-50 text-black cursor-not-allowed text-sm sm:text-base"
               />
             </div>
           </div>
-          <div className="mt-6">
+          <div className="mt-4 sm:mt-6">
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-sm sm:text-base"
             >
               {isSaving && (
                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

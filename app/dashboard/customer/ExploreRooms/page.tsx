@@ -4,6 +4,7 @@
 import { AuthContext } from "@/app/context/AuthContext";
 import {
   Bed,
+  Calendar,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -89,12 +90,12 @@ const CustomerRoomCard = ({
 
   return (
     <div
-      className="group bg-white rounded-lg border border-gray-200 shadow-md hover:shadow-lg transition-shadow flex flex-col h-full overflow-hidden"
+      className="group bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-lg transition-shadow flex flex-col h-full overflow-hidden"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Image Gallery Section */}
-      <div className="relative h-48 w-full bg-gray-200 overflow-hidden">
+      <div className="relative h-40 sm:h-48 w-full bg-gray-200 overflow-hidden">
         {images.length > 0 ? (
           <img
             src={images[currentImgIndex]}
@@ -163,15 +164,15 @@ const CustomerRoomCard = ({
       </div>
 
       {/* Content Section */}
-      <div className="p-5 flex flex-col flex-grow">
+      <div className="p-3 sm:p-5 flex flex-col flex-grow">
         {/* Room Title & ID */}
-        <div className="mb-3">
-          <h3 className="text-xl font-bold text-gray-900">{displayName}</h3>
-          <p className="text-xs text-gray-400 font-mono mt-0.5">Room {room.roomNumber} • ID: {room._id.slice(0, 8)}...</p>
+        <div className="mb-2 sm:mb-3">
+          <h3 className="text-base sm:text-xl font-bold text-gray-900">{displayName}</h3>
+          <p className="text-xs text-gray-400 font-mono mt-0.5">Room {room.roomNumber}</p>
         </div>
 
         {/* Room Details Grid */}
-        <div className="grid grid-cols-2 gap-3 mb-4 pb-4 border-b border-gray-100">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4 pb-3 sm:pb-4 border-b border-gray-100">
           <div className="flex items-center space-x-2">
             <Users className="w-4 h-4 text-blue-600" />
             <div>
@@ -190,9 +191,9 @@ const CustomerRoomCard = ({
 
         {/* Amenities List */}
         {room.amenities && room.amenities.length > 0 && (
-          <div className="mb-5">
-            <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-2.5">Amenities</p>
-            <div className="flex flex-wrap gap-2">
+          <div className="mb-3 sm:mb-5">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Amenities</p>
+            <div className="flex flex-wrap gap-1.5 sm:gap-2">
               {room.amenities.slice(0, 4).map((amenity, idx) => (
                 <span key={idx} className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-xs font-medium text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors">
                   <Check className="w-3 h-3 mr-1.5 text-blue-600" />
@@ -330,34 +331,36 @@ export default function ExploreRoomsPage() {
 
   return (
     <CustomerLayout>
-      <div className="p-6 space-y-6">
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
         {/* Page Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex flex-col gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Explore Our Rooms</h1>
-            <p className="text-gray-600 mt-2">Find the perfect space for your stay</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Explore Our Rooms</h1>
+            <p className="text-sm text-gray-600 mt-1">Find the perfect space for your stay</p>
           </div>
 
           {/* Search / Filter Bar */}
-          <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
             <input
               type="date"
               value={checkIn}
               onChange={(e) => setCheckIn(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
               placeholder="Check In"
             />
             <input
               type="date"
               value={checkOut}
               onChange={(e) => setCheckOut(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!checkIn}
+              min={checkIn}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full disabled:bg-gray-100 disabled:cursor-not-allowed"
               placeholder="Check Out"
             />
             <select
               value={roomType}
               onChange={(e) => setRoomType(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
             >
               <option value="">Any type</option>
               <option value="single">Single</option>
@@ -365,28 +368,41 @@ export default function ExploreRoomsPage() {
               <option value="suite">Suite</option>
               <option value="family">Family</option>
             </select>
+            {(checkIn || checkOut || roomType) && (
+              <button
+                onClick={() => {
+                  setCheckIn('');
+                  setCheckOut('');
+                  setRoomType('');
+                }}
+                className="text-sm text-gray-600 hover:text-gray-900 underline lg:text-left text-center py-2"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         </div>
 
         {/* Results Area */}
         {!checkIn || !checkOut ? (
-          <div className="text-center py-16 bg-white rounded-lg border border-gray-200 shadow-sm text-gray-600">
-            Select check-in and check-out dates to see availability.
+          <div className="text-center py-12 sm:py-16 bg-white rounded-lg border border-gray-200 shadow-sm text-gray-600 px-4">
+            <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+            <p className="text-sm sm:text-base">Select check-in and check-out dates to see availability.</p>
           </div>
         ) : loading ? (
-          <div className="flex items-center justify-center h-64">
+          <div className="flex items-center justify-center h-48 sm:h-64">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
           </div>
         ) : rooms.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-lg border border-gray-200 shadow-sm">
+          <div className="text-center py-12 sm:py-16 bg-white rounded-lg border border-gray-200 shadow-sm px-4">
             <Bed className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-            <h3 className="text-lg font-medium text-gray-900">No rooms available</h3>
-            <p className="text-gray-500 max-w-sm mx-auto mt-1">
+            <h3 className="text-base sm:text-lg font-medium text-gray-900">No rooms available</h3>
+            <p className="text-sm text-gray-500 max-w-sm mx-auto mt-1">
               We are fully booked at the moment. Please check back later or contact reception.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
             {rooms.map((room) => (
               <CustomerRoomCard
                 key={room._id}

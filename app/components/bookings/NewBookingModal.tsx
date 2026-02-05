@@ -195,14 +195,21 @@ export default function NewBookingModal({
           },
           body: JSON.stringify({
             roomId: formData.roomId,
-            checkIn: formData.checkIn,
-            checkOut: formData.checkOut
+            checkIn: new Date(formData.checkIn).toISOString(),
+            checkOut: new Date(formData.checkOut).toISOString()
           })
         });
 
         if (res.ok) {
           const data = await res.json();
           setCalculatedBreakdown(data);
+        } else {
+          try {
+            const error = await res.json();
+            console.error(`Rate calculation error (${res.status}):`, error.error || error.message || error);
+          } catch {
+            console.error(`Rate calculation error (${res.status}): Failed to parse error response`, res.statusText);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch calculation:', error);
@@ -255,23 +262,49 @@ export default function NewBookingModal({
     const isNewGuest = activeTab === 'new';
 
     // Validation
-    if (!formData.roomId || !formData.checkIn || !formData.checkOut) {
-      toast.error("Please select dates and a room");
+    if (!formData.roomId) {
+      toast.error("Select a room");
+      return;
+    }
+
+    if (!formData.checkIn) {
+      toast.error("Pick check-in date");
+      return;
+    }
+
+    if (!formData.checkOut) {
+      toast.error("Pick check-out date");
+      return;
+    }
+
+    // Check date logic
+    const checkInDate = new Date(formData.checkIn);
+    const checkOutDate = new Date(formData.checkOut);
+    if (checkOutDate <= checkInDate) {
+      toast.error("Check-out after check-in");
+      return;
+    }
+
+    // Check room capacity
+    const selectedRoom = rooms.find(r => r._id === formData.roomId);
+    const maxCapacity = selectedRoom?.maxOccupancy || 2;
+    if ((formData as any).adults && (formData as any).adults > maxCapacity) {
+      toast.error(`Max ${maxCapacity} adults allowed`);
       return;
     }
 
     if (isNewGuest && (!newGuest.name || !newGuest.email || !newGuest.phone || !newGuest.idNumber || !newGuest.password)) {
-      toast.error("All guest fields are required (Name, Email, Phone, Identity Number, Password)");
+      toast.error("Fill all guest fields");
       return;
     }
 
     if (isNewGuest && newGuest.password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+      toast.error("Password min 6 chars");
       return;
     }
 
     if (!isNewGuest && !formData.guestId) {
-      toast.error("Please select an existing guest");
+      toast.error("Select existing guest");
       return;
     }
 
@@ -298,7 +331,7 @@ export default function NewBookingModal({
 
         if (!guestRes.ok) {
           const err = await guestRes.json();
-          throw new Error(err.error || "Failed to create new guest profile");
+          throw new Error(err.error || "Create guest failed");
         }
 
         const guestData = await guestRes.json();
@@ -333,21 +366,21 @@ export default function NewBookingModal({
       if (res.ok) {
         if (isNewGuest) {
           toast.success(
-            `Booking created! Password: ${newGuest.password}\n\nShare this with the guest.`,
-            { duration: 10 }
+            `Created! Password: ${newGuest.password}`,
+            { duration: 8 }
           );
         } else {
-          toast.success(isEdit ? "Booking updated" : "Booking created successfully");
+          toast.success(isEdit ? "Booking updated" : "Booking created");
         }
         if (onUpdateBooking) onUpdateBooking();
         onClose();
       } else {
         const err = await res.json();
-        toast.error(err.error || "Failed to save booking");
+        toast.error(err.error || "Save failed");
       }
     } catch (error: any) {
       console.error("Booking error:", error);
-      toast.error(error.message || "An error occurred while saving booking");
+      toast.error(error.message || "Error saving");
     } finally {
       setIsSubmitting(false);
     }
@@ -404,11 +437,16 @@ export default function NewBookingModal({
                 <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <input
                   type="date"
-                  className="pl-10 w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                  disabled={!formData.checkIn}
+                  min={formData.checkIn}
+                  className="pl-10 w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
                   value={formData.checkOut}
                   onChange={(e) => setFormData({ ...formData, checkOut: e.target.value })}
                 />
               </div>
+              {!formData.checkIn && (
+                <p className="text-xs text-gray-500 mt-1">Select check-in first</p>
+              )}
             </div>
           </div>
 

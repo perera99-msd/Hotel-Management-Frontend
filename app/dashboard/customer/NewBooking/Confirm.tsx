@@ -49,8 +49,8 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
           },
           body: JSON.stringify({
             roomId: data.roomId,
-            checkIn: data.bookingDetails.checkIn,
-            checkOut: data.bookingDetails.checkOut
+            checkIn: new Date(data.bookingDetails.checkIn).toISOString(),
+            checkOut: new Date(data.bookingDetails.checkOut).toISOString()
           })
         });
 
@@ -59,8 +59,12 @@ export default function Confirm({ data, prevStep, onComplete }: ConfirmProps) {
           console.log('Rate breakdown response:', result);
           setRateBreakdown(result.rateBreakdown || result);
         } else {
-          const error = await res.json();
-          console.error('Rate calculation error:', error);
+          try {
+            const error = await res.json();
+            console.error(`Rate calculation error (${res.status}):`, error.error || error.message || error);
+          } catch {
+            console.error(`Rate calculation error (${res.status}): Failed to parse error response`, res.statusText);
+          }
         }
       } catch (error) {
         console.error('Error fetching rate breakdown:', error);

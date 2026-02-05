@@ -1,5 +1,6 @@
 "use client";
 
+import toast from "react-hot-toast";
 import { BookingData } from "./NewBookingModal";
 
 interface BookingDetailsProps {
@@ -10,6 +11,7 @@ interface BookingDetailsProps {
   currentStep: number;
   totalSteps: number;
   onComplete?: () => void; // ✅ Added this
+  selectedRoom?: any; // Add selected room to access capacity
 }
 
 export default function BookingDetails({
@@ -17,11 +19,43 @@ export default function BookingDetails({
   updateData,
   nextStep,
   prevStep,
+  selectedRoom,
 }: BookingDetailsProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validation: Check if dates are selected
+    if (!data.bookingDetails.checkIn) {
+      toast.error("Pick check-in date");
+      return;
+    }
+
+    if (!data.bookingDetails.checkOut) {
+      toast.error("Pick check-out date");
+      return;
+    }
+
+    // Validation: Check-out must be same day or after check-in
+    const checkInDate = new Date(data.bookingDetails.checkIn);
+    const checkOutDate = new Date(data.bookingDetails.checkOut);
+
+    if (checkOutDate < checkInDate) {
+      toast.error("Check-out after check-in");
+      return;
+    }
+
+    // Validation: Room capacity
+    const maxCapacity = selectedRoom?.maxOccupancy || 2;
+    if (data.bookingDetails.adults > maxCapacity) {
+      toast.error(`Max ${maxCapacity} adults allowed`);
+      return;
+    }
+
     nextStep();
   };
+
+  const maxCapacity = selectedRoom?.maxOccupancy || 2;
+  const canAddMore = (data.bookingDetails.adults || 1) < maxCapacity;
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 md:p-6">
@@ -53,24 +87,33 @@ export default function BookingDetails({
               onChange={(e) =>
                 updateData("bookingDetails", { checkOut: e.target.value })
               }
-              className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all text-black"
+              disabled={!data.bookingDetails.checkIn}
+              min={data.bookingDetails.checkIn}
+              className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all text-black disabled:bg-gray-50 disabled:cursor-not-allowed"
             />
+            {!data.bookingDetails.checkIn && (
+              <p className="text-xs text-gray-500 mt-1">Select check-in first</p>
+            )}
           </div>
         </div>
 
         <div>
           <label className="block text-xs sm:text-sm font-medium text-gray-600 mb-2 sm:mb-3">
-            Number of Adults *
+            Number of Adults * (Max: {maxCapacity})
           </label>
           <div className="flex items-center space-x-3 sm:space-x-4">
             <button
               type="button"
-              onClick={() =>
-                updateData("bookingDetails", {
-                  adults: Math.max(1, (data.bookingDetails.adults || 1) - 1),
-                })
-              }
-              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50 transition-colors text-sm sm:text-base"
+              onClick={() => {
+                const current = data.bookingDetails.adults || 1;
+                if (current > 1) {
+                  updateData("bookingDetails", {
+                    adults: current - 1,
+                  });
+                }
+              }}
+              disabled={(data.bookingDetails.adults || 1) <= 1}
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
             >
               -
             </button>
@@ -79,12 +122,16 @@ export default function BookingDetails({
             </span>
             <button
               type="button"
-              onClick={() =>
-                updateData("bookingDetails", {
-                  adults: (data.bookingDetails.adults || 1) + 1,
-                })
-              }
-              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50 transition-colors text-sm sm:text-base"
+              onClick={() => {
+                const current = data.bookingDetails.adults || 1;
+                if (canAddMore) {
+                  updateData("bookingDetails", {
+                    adults: current + 1,
+                  });
+                }
+              }}
+              disabled={!canAddMore}
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
             >
               +
             </button>

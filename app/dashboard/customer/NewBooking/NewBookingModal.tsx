@@ -1,14 +1,15 @@
 // app/dashboard/customer/NewBooking/NewBookingModal.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import GuestInfo from "./GuestInfo";
+import { useAuth } from "@/app/context/AuthContext";
+import { useEffect, useState } from "react";
 import BookingDetails from "./BookingDetails";
 import Confirm from "./Confirm";
+import GuestInfo from "./GuestInfo";
 
 // Simplified to only required fields
 export type BookingData = {
-  roomId?: string; 
+  roomId?: string;
   roomRate?: number;
   guestInfo: {
     firstName: string;
@@ -38,6 +39,7 @@ export default function NewBookingModal({
   defaultCheckIn = "",
   defaultCheckOut = ""
 }: NewBookingModalProps) {
+  const { profile, user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [bookingData, setBookingData] = useState<BookingData>({
     roomId: selectedRoom?._id || selectedRoom?.id || "",
@@ -55,26 +57,25 @@ export default function NewBookingModal({
     },
   });
 
-  // Pre-fill user details if logged in (Optional optimization)
+  // Pre-fill user details from auth context
   useEffect(() => {
-    const storedUser = localStorage.getItem("currentUser");
-    if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser);
-        const names = user.name ? user.name.split(' ') : ["", ""];
-        setBookingData(prev => ({
-          ...prev,
-          guestInfo: {
-            ...prev.guestInfo,
-            firstName: names[0] || "",
-            lastName: names.slice(1).join(' ') || "",
-            email: user.email || "",
-            phone: user.phone || ""
-          }
-        }));
-      } catch (e) { console.error("Error parsing user data", e); }
+    if (profile) {
+      // Clean phone: remove +94 and leading 0
+      let phone = profile.phone || "";
+      phone = phone.replace(/^\+94/, "").replace(/^0+/, "");
+
+      setBookingData(prev => ({
+        ...prev,
+        guestInfo: {
+          ...prev.guestInfo,
+          firstName: profile.firstName || profile.name?.split(' ')[0] || "",
+          lastName: profile.lastName || profile.name?.split(' ').slice(1).join(' ') || "",
+          email: profile.email || user?.email || "",
+          phone: phone
+        }
+      }));
     }
-  }, []);
+  }, [profile, user]);
 
   const nextStep = () => setCurrentStep(currentStep + 1);
   const prevStep = () => setCurrentStep(currentStep - 1);
@@ -122,13 +123,11 @@ export default function NewBookingModal({
               <div key={step.number} className="flex flex-col items-center flex-1">
                 <div className="flex items-center w-full">
                   <div className="flex flex-col items-center flex-1">
-                    <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs ${
-                        currentStep >= step.number ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"
+                    <div className={`flex items-center justify-center w-6 h-6 rounded-full text-xs ${currentStep >= step.number ? "bg-blue-600 text-white" : "bg-gray-300 text-gray-600"
                       }`}>
                       {step.number}
                     </div>
-                    <span className={`mt-1 text-xs font-medium text-center ${
-                        currentStep >= step.number ? "text-blue-600" : "text-gray-500"
+                    <span className={`mt-1 text-xs font-medium text-center ${currentStep >= step.number ? "text-blue-600" : "text-gray-500"
                       }`}>
                       {step.title}
                     </span>
@@ -153,6 +152,7 @@ export default function NewBookingModal({
               currentStep={currentStep}
               totalSteps={steps.length}
               onComplete={onComplete}
+              selectedRoom={selectedRoom}
             />
           )}
         </div>

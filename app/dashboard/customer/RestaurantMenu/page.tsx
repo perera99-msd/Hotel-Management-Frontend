@@ -1,13 +1,13 @@
 // app/dashboard/customer/RestaurantMenu/page.tsx
 "use client";
 
-import { useState, useEffect, useContext } from "react";
-import CustomerLayout from "../../../components/layout/CustomerLayout";
-import OrderSelectionModal, { SelectedMenuItem, MenuItem } from "./OrderSelectionModal";
-import OrderConfirmationModal from "./OrderConfirmationModal";
-import CustomOrderModal from "./CustomOrderModal"; 
 import { AuthContext } from "@/app/context/AuthContext";
+import { useContext, useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import CustomerLayout from "../../../components/layout/CustomerLayout";
+import CustomOrderModal from "./CustomOrderModal";
+import OrderConfirmationModal from "./OrderConfirmationModal";
+import OrderSelectionModal, { MenuItem, SelectedMenuItem } from "./OrderSelectionModal";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -18,14 +18,14 @@ export default function RestaurantMenuPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
-  const [isCustomOrderModalOpen, setIsCustomOrderModalOpen] = useState(false); 
+  const [isCustomOrderModalOpen, setIsCustomOrderModalOpen] = useState(false);
   const [isConfirmationModalOpen, setIsConfirmationModalOpen] = useState(false);
   const [selectedOrderItems, setSelectedOrderItems] = useState<SelectedMenuItem[]>([]);
 
   // Fetch menu items from backend
   const fetchMenuItems = async () => {
     if (!token) return;
-    
+
     try {
       setLoading(true);
       const response = await fetch(`${API_URL}/api/menu`, {
@@ -59,8 +59,8 @@ export default function RestaurantMenuPage() {
   const categories = ["All", ...new Set(menuItems.map(item => item.category))];
 
   // Filter menu items by selected category
-  const filteredItems = selectedCategory === "All" 
-    ? menuItems 
+  const filteredItems = selectedCategory === "All"
+    ? menuItems
     : menuItems.filter(item => item.category === selectedCategory);
 
   const handleProceedToOrder = (selectedItems: SelectedMenuItem[]) => {
@@ -142,25 +142,25 @@ export default function RestaurantMenuPage() {
 
   return (
     <CustomerLayout>
-      <div className="p-4 sm:p-6">
+      <div className="p-3 sm:p-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div className="flex flex-col gap-3 mb-4 sm:mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Restaurant Menu</h1>
-            <p className="text-base text-gray-600">Explore our delicious dining options</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1">Restaurant Menu</h1>
+            <p className="text-sm sm:text-base text-gray-600">Explore our delicious dining options</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2 sm:gap-3">
             {/* Custom Order Button */}
-            <button 
+            <button
               onClick={() => setIsCustomOrderModalOpen(true)}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors"
             >
               Custom Order
             </button>
             {/* Regular Order Button */}
-            <button 
+            <button
               onClick={() => setIsOrderModalOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors"
             >
               + Order
             </button>
@@ -174,11 +174,10 @@ export default function RestaurantMenuPage() {
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  selectedCategory === category
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${selectedCategory === category
                     ? "bg-blue-600 text-white"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
+                  }`}
               >
                 {category}
               </button>
@@ -188,28 +187,28 @@ export default function RestaurantMenuPage() {
 
         {/* Menu Items Grid */}
         {filteredItems.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No menu items found.</p>
-            <p className="text-gray-400 text-sm">Please check back later or try a different category.</p>
+          <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+            <p className="text-gray-500 text-base sm:text-lg">No menu items found.</p>
+            <p className="text-gray-400 text-xs sm:text-sm">Please check back later or try a different category.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
             {filteredItems.map((item) => (
               <div
                 key={item._id}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 hover:shadow-lg transition-all"
               >
                 {/* Image */}
                 {item.image && (
                   <div className="mb-3">
-                    <img 
-                      src={item.image} 
+                    <img
+                      src={item.image}
                       alt={item.name}
                       className="w-full h-48 object-cover rounded-lg"
                     />
                   </div>
                 )}
-                
+
                 {/* Title + Price */}
                 <div className="flex justify-between items-start mb-2">
                   <div>
@@ -248,24 +247,22 @@ export default function RestaurantMenuPage() {
                 {/* Status + Order Button */}
                 <div className="flex justify-between items-center">
                   <span
-                    className={`text-xs font-medium px-2 py-1 rounded-full ${
-                      item.available
+                    className={`text-xs font-medium px-2 py-1 rounded-full ${item.available
                         ? "bg-green-100 text-green-800"
                         : "bg-red-100 text-red-800"
-                    }`}
+                      }`}
                   >
                     {item.available ? "Available" : "Unavailable"}
                   </span>
-                  
+
                   {/* Order Button */}
                   <button
                     onClick={() => handleIndividualOrder(item)}
                     disabled={!item.available}
-                    className={`py-2 px-4 rounded-md font-medium text-sm transition-colors ${
-                      item.available
+                    className={`py-2 px-4 rounded-md font-medium text-sm transition-colors ${item.available
                         ? "bg-blue-600 hover:bg-blue-700 text-white"
                         : "bg-gray-100 text-gray-500 cursor-not-allowed"
-                    }`}
+                      }`}
                   >
                     Order
                   </button>

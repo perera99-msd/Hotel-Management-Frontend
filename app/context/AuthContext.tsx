@@ -13,6 +13,7 @@ export interface UserProfile {
   email: string;
   name: string;
   phone?: string;
+  idNumber?: string;
   roles: string[];
   createdAt?: string;
   updatedAt?: string;
@@ -65,10 +66,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(data);
         setRole(data.roles?.[0] || 'customer');
       } else {
+        // Even on error, set a default role so loading can complete
+        setProfile(null);
         setRole('customer');
       }
     } catch (error) {
       console.error("Failed to connect to backend", error);
+      // Even on error, set a default role so loading can complete
+      setProfile(null);
       setRole('customer');
     }
   }, [API_URL]);

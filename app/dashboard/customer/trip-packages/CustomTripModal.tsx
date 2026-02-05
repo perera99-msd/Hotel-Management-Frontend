@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useContext, useEffect } from "react";
 import { AuthContext } from "@/app/context/AuthContext";
+import { useContext, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
 interface CustomTripModalProps {
@@ -35,7 +35,7 @@ export default function CustomTripModal({
     const [currentStep, setCurrentStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [showSuccessPopup, setShowSuccessPopup] = useState(false);
-    
+
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
     useEffect(() => {
@@ -77,7 +77,7 @@ export default function CustomTripModal({
         "City Tour",
     ];
 
-    const participantOptions = Array.from({length: 20}, (_, i) => i + 1);
+    const participantOptions = Array.from({ length: 20 }, (_, i) => i + 1);
     const accommodationOptions = ["Luxury", "Standard", "Budget", "Hostel", "Vacation Rental"];
     const transportationOptions = ["Private Car", "Rental Car", "Public Transport", "Tour Bus", "Mixed"];
 
@@ -87,6 +87,12 @@ export default function CustomTripModal({
     });
 
     const selectedBooking = eligibleBookings.find((b) => b._id === selectedBookingId);
+    const bookingStartDate = selectedBooking?.checkIn
+        ? new Date(selectedBooking.checkIn).toISOString().slice(0, 10)
+        : undefined;
+    const bookingEndDate = selectedBooking?.checkOut
+        ? new Date(selectedBooking.checkOut).toISOString().slice(0, 10)
+        : undefined;
 
     const handleInputChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -132,6 +138,23 @@ export default function CustomTripModal({
         if (!selectedBookingId) {
             toast.error("Select a confirmed or checked-in booking first");
             return;
+        }
+
+        if (selectedBooking) {
+            const startDate = new Date(tripData.startDate);
+            const endDate = new Date(tripData.endDate);
+            const checkIn = new Date(selectedBooking.checkIn);
+            const checkOut = new Date(selectedBooking.checkOut);
+
+            if (endDate < startDate) {
+                toast.error("End after start");
+                return;
+            }
+
+            if (startDate < checkIn || endDate > checkOut) {
+                toast.error("Date outside booking");
+                return;
+            }
         }
 
         setLoading(true);
@@ -257,10 +280,10 @@ export default function CustomTripModal({
                                     <div key={step} className="flex items-center">
                                         <div
                                             className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${step === currentStep
-                                                    ? "bg-white text-purple-600"
-                                                    : step < currentStep
-                                                        ? "bg-green-500 text-white"
-                                                        : "bg-purple-400 text-white"
+                                                ? "bg-white text-purple-600"
+                                                : step < currentStep
+                                                    ? "bg-green-500 text-white"
+                                                    : "bg-purple-400 text-white"
                                                 }`}
                                         >
                                             {step < currentStep ? "✓" : step}
@@ -360,7 +383,8 @@ export default function CustomTripModal({
                                             name="startDate"
                                             value={tripData.startDate}
                                             onChange={handleInputChange}
-                                            min={new Date().toISOString().split("T")[0]}
+                                            min={bookingStartDate || new Date().toISOString().slice(0, 10)}
+                                            max={bookingEndDate}
                                             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                                         />
                                     </div>
@@ -374,7 +398,8 @@ export default function CustomTripModal({
                                             name="endDate"
                                             value={tripData.endDate}
                                             onChange={handleInputChange}
-                                            min={tripData.startDate || new Date().toISOString().split("T")[0]}
+                                            min={tripData.startDate || bookingStartDate || new Date().toISOString().slice(0, 10)}
+                                            max={bookingEndDate}
                                             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-black"
                                         />
                                     </div>
@@ -415,8 +440,8 @@ export default function CustomTripModal({
                                                 type="button"
                                                 onClick={() => handlePreferenceToggle(preference)}
                                                 className={`p-2 border rounded-lg text-sm font-medium transition-all ${tripData.preferences.includes(preference)
-                                                        ? "bg-purple-100 border-purple-500 text-black"
-                                                        : "border-gray-300 text-black hover:border-purple-300 hover:bg-purple-50"
+                                                    ? "bg-purple-100 border-purple-500 text-black"
+                                                    : "border-gray-300 text-black hover:border-purple-300 hover:bg-purple-50"
                                                     }`}
                                             >
                                                 {preference}

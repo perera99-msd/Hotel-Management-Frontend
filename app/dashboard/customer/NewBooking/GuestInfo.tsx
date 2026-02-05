@@ -1,8 +1,8 @@
 "use client";
 
+import { AuthContext } from "@/app/context/AuthContext";
 import { useContext, useEffect } from "react";
 import { BookingData } from "./NewBookingModal";
-import { AuthContext } from "@/app/context/AuthContext";
 
 interface GuestInfoProps {
   data: BookingData;
@@ -28,7 +28,7 @@ export default function GuestInfo({
       const nameParts = name.split(" ");
       const firstName = nameParts[0] || "";
       const lastName = nameParts.slice(1).join(" ") || "";
-      
+
       // ✅ FIX: Remove +94 AND leading 0 from profile phone if present
       let phone = profile?.phone || user?.phoneNumber || "";
       phone = phone.replace(/^\+94/, "").replace(/^0+/, "");
@@ -79,17 +79,16 @@ export default function GuestInfo({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Last Name *
+              Last Name
             </label>
             <input
               type="text"
-              required
               value={data.guestInfo.lastName}
               onChange={(e) =>
                 updateData("guestInfo", { lastName: e.target.value })
               }
               className="w-full px-4 py-3 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-black"
-              placeholder="Last name"
+              placeholder="Last name (optional)"
             />
           </div>
         </div>

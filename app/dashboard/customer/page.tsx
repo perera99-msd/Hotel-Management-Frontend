@@ -2,12 +2,14 @@
 "use client";
 
 import { AuthContext } from "@/app/context/AuthContext";
-import { ArrowRight, Bed, Calendar, CheckCircle, Clock, Loader2, Phone, Plus, XCircle } from "lucide-react";
+import { ArrowRight, Bed, Calendar, CheckCircle, Clock, Loader2, Package, Phone, Plus, Utensils, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import HeroSlider from "../../components/dashboard/HeroSlider";
 import CustomerLayout from "../../components/layout/CustomerLayout";
+import PageCard from "../../components/ui/PageCard";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -24,6 +26,7 @@ interface Booking {
   checkIn: string;
   checkOut: string;
   status: string;
+  shortStay?: boolean; // Flag for same-day bookings
   totalAmount?: number; // Optional to handle cases where it's missing
   invoiceTotal?: number; // Added for completed bookings
 }
@@ -125,10 +128,14 @@ export default function CustomerDashboard() {
   const [tripRequests, setTripRequests] = useState<TripRequest[]>([]);
   const [deals, setDeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const router = useRouter();
 
-  const fetchBookings = async () => {
-    if (!token) return;
+  const fetchBookings = useCallback(async () => {
+    // Wait for both token and profile to be available
+    if (!token || !profile) {
+      return;
+    }
 
     try {
       setLoading(true);
@@ -151,6 +158,7 @@ export default function CustomerDashboard() {
         setCompletedBookings(data.completedBookings || []);
         setOrders(data.orders || []);
         setTripRequests(data.tripRequests || []);
+        setDataLoaded(true);
       } else {
         console.error("Failed to fetch dashboard data");
       }
@@ -159,9 +167,9 @@ export default function CustomerDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, profile]);
 
-  const fetchDeals = async () => {
+  const fetchDeals = useCallback(async () => {
     if (!token) return;
     try {
       const res = await fetch(`${API_URL}/api/deals`, {
@@ -180,20 +188,15 @@ export default function CustomerDashboard() {
     } catch (err) {
       console.error('Failed to load deals', err);
     }
-  };
-
-  const fetchOrders = async () => {
-    // This function is now handled by fetchBookings
-  };
-
-  const fetchTrips = async () => {
-    // This function is now handled by fetchBookings
-  };
+  }, [token]);
 
   useEffect(() => {
-    fetchBookings();
-    fetchDeals();
-  }, [token]);
+    // Only fetch when we have both token and profile
+    if (token && profile) {
+      fetchBookings();
+      fetchDeals();
+    }
+  }, [token, profile, fetchBookings, fetchDeals]);
 
   // Calculate Real Stats from fetched data
   const completedStays = completedBookings.length;
@@ -262,462 +265,455 @@ export default function CustomerDashboard() {
 
   return (
     <CustomerLayout>
-      <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="space-y-6">
-          {/* Welcome Section */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-xl p-6 text-white">
-            <h2 className="text-2xl font-bold mb-2">
-              Welcome back, {profile?.name || user?.displayName || "Guest"}!
-            </h2>
-            <p className="text-blue-100">
-              Manage your bookings and explore our services
-            </p>
-          </div>
+      <div className="w-full mx-auto px-2 sm:px-4 lg:px-8 py-3 sm:py-6">
+        <div className="space-y-4 sm:space-y-8 fade-in-animation">
+          {/* 1. HERO SECTION - New Slider */}
+          <section className="w-full -mx-2 sm:mx-0">
+            <HeroSlider deals={deals} />
+          </section>
 
-          {/* Quick Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6 text-center shadow-sm">
-              <Calendar className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-gray-900">
-                {bookings.length}
-              </div>
-              <div className="text-sm text-gray-600">Total Bookings</div>
-            </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-6 text-center shadow-sm">
-              <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-gray-900">
-                {completedStays}
-              </div>
-              <div className="text-sm text-gray-600">Completed Stays</div>
-            </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-6 text-center shadow-sm">
-              <Clock className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-gray-900">{upcomingStays}</div>
-              <div className="text-sm text-gray-600">Active & Upcoming</div>
-            </div>
-          </div>
+          {/* 2. OVERVIEW WIDGETS - Redesigned Grid */}
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+            {/* Main Stats Area */}
+            <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+              {/* Welcome Card with Stats */}
+              <div className="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-4 sm:p-6 rounded-2xl shadow-sm border border-blue-500/20">
+                <h2 className="text-xl sm:text-2xl font-bold mb-1 sm:mb-2">
+                  Welcome back, {profile?.name || user?.displayName || "Guest"}!
+                </h2>
+                <p className="text-blue-100 mb-4 sm:mb-6 text-sm sm:text-base">
+                  Manage your bookings and explore our services
+                </p>
 
-          {/* Current Deals */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">Current Deals</h3>
-                <p className="text-sm text-gray-600">To apply a deal, please contact reception.</p>
+                {/* Quick Stats */}
+                <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                  <div className="bg-white/10 backdrop-blur-sm p-3 sm:p-4 rounded-xl border border-white/20">
+                    <Calendar className="h-5 w-5 sm:h-6 sm:w-6 mb-1 sm:mb-2" />
+                    <div className="text-xl sm:text-2xl font-bold">{bookings.length}</div>
+                    <div className="text-xs text-blue-100">Total Bookings</div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-3 sm:p-4 rounded-xl border border-white/20">
+                    <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 mb-1 sm:mb-2" />
+                    <div className="text-xl sm:text-2xl font-bold">{completedStays}</div>
+                    <div className="text-xs text-blue-100">Completed</div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-3 sm:p-4 rounded-xl border border-white/20">
+                    <Clock className="h-5 w-5 sm:h-6 sm:w-6 mb-1 sm:mb-2" />
+                    <div className="text-xl sm:text-2xl font-bold">{upcomingStays}</div>
+                    <div className="text-xs text-blue-100">Active</div>
+                  </div>
+                </div>
               </div>
-              <button
-                onClick={handleReceptionContactClick}
-                className="flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-md transition-colors"
-              >
-                <Phone className="h-4 w-4" />
-                Call Reception
-              </button>
-            </div>
-            {deals.length === 0 ? (
-              <div className="text-center py-6 text-gray-500">
-                <Calendar className="h-10 w-10 mx-auto mb-2 text-gray-400" />
-                <p>No active deals at the moment.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {deals.map((deal) => {
-                  const statusColors: Record<string, string> = {
-                    Ongoing: "bg-green-100 text-green-800 border-green-200",
-                    New: "bg-blue-100 text-blue-800 border-blue-200",
-                    Inactive: "bg-gray-100 text-gray-800 border-gray-200",
-                    Full: "bg-yellow-100 text-yellow-800 border-yellow-200",
-                  };
-                  const start = deal.startDate ? new Date(deal.startDate) : null;
-                  const end = deal.endDate ? new Date(deal.endDate) : null;
-                  const dealImage = deal.image || (Array.isArray(deal.images) && deal.images.length > 0 ? deal.images[0] : null);
 
-                  return (
-                    <div
-                      key={deal._id || deal.referenceNumber || deal.dealName}
-                      className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow"
-                    >
-                      {/* Deal Image */}
-                      {dealImage && (
-                        <div className="h-24 bg-gray-100 overflow-hidden">
-                          <img
-                            src={dealImage}
-                            alt={deal.dealName}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        </div>
-                      )}
-                      <div className="p-3">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <h4 className="font-semibold text-gray-900 text-sm line-clamp-2">{deal.dealName}</h4>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap flex-shrink-0 ${statusColors[deal.status] || "bg-gray-100 text-gray-800 border-gray-200"
-                              }`}
+              {/* Fresh Activity - Mobile Only */}
+              <div className="lg:hidden bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Fresh Activity</h3>
+                    <p className="text-xs text-gray-500">Your hotel is buzzing today.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Active Bookings Badge */}
+                  <Link
+                    href="/dashboard/customer/bookings"
+                    className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 hover:shadow-md transition-all"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Bed className="h-5 w-5 text-blue-600" />
+                      <span className="text-2xl font-bold text-blue-900">{bookings.length}</span>
+                    </div>
+                    <p className="text-xs font-semibold text-blue-700">Active Bookings</p>
+                  </Link>
+
+                  {/* Active Orders Badge */}
+                  <Link
+                    href="/dashboard/customer/RestaurantMenu"
+                    className={`${activeOrders.length > 0 ? "bg-red-50 border-red-400" : "bg-gray-50 border-gray-200"
+                      } border-2 rounded-2xl p-4 hover:shadow-md transition-all`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Utensils className={`h-5 w-5 ${activeOrders.length > 0 ? "text-red-600" : "text-gray-400"}`} />
+                      <span className={`text-2xl font-bold ${activeOrders.length > 0 ? "text-red-900" : "text-gray-400"}`}>
+                        {activeOrders.length}
+                      </span>
+                    </div>
+                    <p className={`text-xs font-semibold ${activeOrders.length > 0 ? "text-red-700" : "text-gray-500"}`}>
+                      Active Orders
+                    </p>
+                  </Link>
+
+                  {/* Active Trips Badge */}
+                  <Link
+                    href="/dashboard/customer/trip-packages"
+                    className={`${activeTrips.length > 0 ? "bg-purple-50 border-purple-400" : "bg-gray-50 border-gray-200"
+                      } border-2 rounded-2xl p-4 hover:shadow-md transition-all`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Package className={`h-5 w-5 ${activeTrips.length > 0 ? "text-purple-600" : "text-gray-400"}`} />
+                      <span className={`text-2xl font-bold ${activeTrips.length > 0 ? "text-purple-900" : "text-gray-400"}`}>
+                        {activeTrips.length}
+                      </span>
+                    </div>
+                    <p className={`text-xs font-semibold ${activeTrips.length > 0 ? "text-purple-700" : "text-gray-500"}`}>
+                      Trip Requests
+                    </p>
+                  </Link>
+
+                  {/* Completed Stays Badge */}
+                  <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle className="h-5 w-5 text-green-600" />
+                      <span className="text-2xl font-bold text-green-900">{completedStays}</span>
+                    </div>
+                    <p className="text-xs font-semibold text-green-700">Completed</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recent Activity Card */}
+              <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-100">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg sm:text-xl font-semibold text-gray-800">Recent Bookings</h3>
+                  <Link
+                    href="/dashboard/customer/ExploreRooms"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center transition-colors shadow-sm"
+                  >
+                    <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">New Booking</span>
+                    <span className="sm:hidden">New</span>
+                  </Link>
+                </div>
+
+                <div className="space-y-3">
+                  {bookings.length === 0 && completedBookings.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                      <p>No bookings yet. Create your first booking!</p>
+                    </div>
+                  ) : (
+                    // Show top 3 most recent bookings
+                    [...bookings, ...completedBookings]
+                      .sort((a, b) => new Date(b.checkIn).getTime() - new Date(a.checkIn).getTime())
+                      .slice(0, 3)
+                      .map((booking) => {
+                        const room = typeof booking.roomId === 'object' ? (booking.roomId as unknown as Room) : null;
+                        const status = getBookingStatus(booking.status);
+                        const StatusIcon = status.icon;
+                        const isCancellable = ["confirmed", "pending"].includes(booking.status.toLowerCase());
+
+                        // Check for deal info
+                        const dealInfo = typeof booking.appliedDealId === 'object' ? booking.appliedDealId : null;
+                        const hasDiscount = booking.appliedDiscount && booking.appliedDiscount > 0;
+
+                        // Calculate Price Logic
+                        const checkIn = new Date(booking.checkIn);
+                        const checkOut = new Date(booking.checkOut);
+                        const nights = Math.ceil(Math.abs(checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)) || 1;
+
+                        const isCompleted = booking.status.toLowerCase() === "checkedout" || booking.status.toLowerCase() === "checked-out";
+
+                        let displayAmount = 0;
+                        if (isCompleted) {
+                          displayAmount = booking.invoiceTotal || 0;
+                        } else {
+                          displayAmount = booking.roomTotal || booking.totalAmount || (booking.appliedRate ? booking.appliedRate * nights : (room?.rate ? room.rate * nights : 0));
+                        }
+
+                        return (
+                          <div
+                            key={booking._id}
+                            className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
                           >
-                            {deal.status}
-                          </span>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs text-gray-500">
-                            {start ? start.toLocaleDateString() : "-"} - {end ? end.toLocaleDateString() : "-"}
-                          </p>
-                          <p className="text-xs text-gray-600 line-clamp-1">
-                            {Array.isArray(deal.roomType)
-                              ? (deal.roomType.length ? deal.roomType.join(', ') : 'All types')
-                              : (deal.roomType || 'All types')}
-                          </p>
-                          <div className="bg-emerald-50 border border-emerald-200 rounded p-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-emerald-700 font-bold text-sm">{deal.discount}%</span>
-                              <div>
-                                <p className="text-xs font-semibold text-emerald-900">Discount</p>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                              <div className="flex items-center space-x-4">
+                                <div className="p-3 bg-blue-50 rounded-xl flex-shrink-0">
+                                  {getRoomTypeIcon(room?.type || "standard")}
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-semibold text-gray-900">
+                                      {room ? `Room ${room.roomNumber}` : `Booking #${booking._id.slice(-6)}`}
+                                    </h4>
+                                    {booking.shortStay && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200">
+                                        Short Stay
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-gray-500 mt-1 flex items-center">
+                                    <span className="font-medium">{new Date(booking.checkIn).toLocaleDateString()}</span>
+                                    <ArrowRight className="h-3 w-3 mx-2 text-gray-400" />
+                                    <span className="font-medium">{new Date(booking.checkOut).toLocaleDateString()}</span>
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-row items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${status.color}`}>
+                                  <StatusIcon className="h-3 w-3 mr-1.5" />
+                                  {status.text}
+                                </span>
+
+                                {displayAmount > 0 && (
+                                  <div className="text-right">
+                                    {isCompleted && <div className="text-xs text-gray-500">Total Paid</div>}
+                                    <div className="text-sm font-bold text-gray-900">
+                                      ${displayAmount.toFixed(2)}
+                                    </div>
+                                    {hasDiscount && dealInfo && (
+                                      <div className="text-xs text-emerald-600 font-medium mt-0.5">
+                                        💰 {(dealInfo as any).dealName}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {isCancellable && (
+                                  <button
+                                    onClick={() => handleCancelClick(booking._id)}
+                                    className="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-md transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
-                          {deal.description && (
-                            <p className="text-xs text-gray-500 line-clamp-1">{deal.description}</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Recent Bookings */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Recent Bookings
-              </h3>
-              <Link
-                href="/dashboard/customer/ExploreRooms"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center transition-colors shadow-sm"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                New Booking
-              </Link>
-            </div>
-            <div className="space-y-4">
-              {bookings.length === 0 && completedBookings.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                  <p>No bookings yet. Create your first booking!</p>
+                        );
+                      })
+                  )}
                 </div>
-              ) : (
-                // Combine active and completed bookings, sort by check-in date (most recent first)
-                [...bookings, ...completedBookings]
-                  .sort((a, b) => new Date(b.checkIn).getTime() - new Date(a.checkIn).getTime())
-                  .slice(0, 5)
-                  .map((booking) => {
-                    const room = typeof booking.roomId === 'object' ? (booking.roomId as unknown as Room) : null;
-                    const status = getBookingStatus(booking.status);
-                    const StatusIcon = status.icon;
-                    const isCancellable = ["confirmed", "pending"].includes(booking.status.toLowerCase());
+              </div>
+            </div>
 
-                    // Check for deal info
-                    const dealInfo = typeof booking.appliedDealId === 'object' ? booking.appliedDealId : null;
-                    const hasDiscount = booking.appliedDiscount && booking.appliedDiscount > 0;
+            {/* Side Panel - Quick Actions & Help (Hidden on mobile, shown on desktop) */}
+            <div className="hidden lg:block space-y-6">
+              {/* Quick Actions Card */}
+              <div className="bg-primary/5 p-6 rounded-2xl border border-primary/10">
+                <h3 className="text-lg font-semibold mb-4 text-gray-900">Quick Actions</h3>
+                <div className="space-y-3">
+                  <Link
+                    href="/dashboard/customer/ExploreRooms"
+                    className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all group"
+                  >
+                    <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
+                      <Bed className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900">Book a Room</div>
+                      <div className="text-xs text-gray-500">Explore available rooms</div>
+                    </div>
+                  </Link>
 
-                    // Calculate Price Logic
-                    const checkIn = new Date(booking.checkIn);
-                    const checkOut = new Date(booking.checkOut);
-                    const nights = Math.ceil(Math.abs(checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)) || 1;
+                  <Link
+                    href="/dashboard/customer/trip-packages"
+                    className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-300 hover:shadow-md transition-all group"
+                  >
+                    <div className="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
+                      <Package className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900">Trip Packages</div>
+                      <div className="text-xs text-gray-500">Explore destinations</div>
+                    </div>
+                  </Link>
 
-                    // For completed bookings, use invoice total; otherwise use appliedRate or calculate
-                    const isCompleted = booking.status.toLowerCase() === "checkedout" || booking.status.toLowerCase() === "checked-out";
+                  <Link
+                    href="/dashboard/customer/RestaurantMenu"
+                    className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-green-300 hover:shadow-md transition-all group"
+                  >
+                    <div className="p-2 bg-green-100 rounded-lg group-hover:bg-green-200 transition-colors">
+                      <Utensils className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900">Order Food</div>
+                      <div className="text-xs text-gray-500">Browse our menu</div>
+                    </div>
+                  </Link>
+                </div>
+              </div>
 
-                    let displayAmount = 0;
-                    if (isCompleted) {
-                      // Use invoice total for completed bookings
-                      displayAmount = booking.invoiceTotal || 0;
-                      console.log('💰 Completed Booking:', {
-                        id: booking._id.slice(-6),
-                        status: booking.status,
-                        invoiceTotal: booking.invoiceTotal,
-                        displayAmount
-                      });
-                    } else {
-                      // Use roomTotal if available, otherwise calculate from appliedRate or room rate
-                      displayAmount = booking.roomTotal || booking.totalAmount || (booking.appliedRate ? booking.appliedRate * nights : (room?.rate ? room.rate * nights : 0));
-                    }
+              {/* Active Orders Summary */}
+              {activeOrders.length > 0 && (
+                <div className="bg-green-50 p-6 rounded-2xl border border-green-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Utensils className="h-5 w-5 text-green-700" />
+                    <h4 className="font-bold text-green-900">Active Orders</h4>
+                  </div>
+                  <p className="text-sm text-green-700 mb-2">
+                    You have {activeOrders.length} active {activeOrders.length === 1 ? 'order' : 'orders'}
+                  </p>
+                  <div className="text-xs text-green-600">
+                    {activeOrders[0].status} • Room {activeOrders[0].roomNumber || 'N/A'}
+                  </div>
+                </div>
+              )}
+
+              {/* Active Trips Summary */}
+              {activeTrips.length > 0 && (
+                <div className="bg-purple-50 p-6 rounded-2xl border border-purple-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Package className="h-5 w-5 text-purple-700" />
+                    <h4 className="font-bold text-purple-900">Trip Requests</h4>
+                  </div>
+                  <p className="text-sm text-purple-700 mb-2">
+                    You have {activeTrips.length} active {activeTrips.length === 1 ? 'trip' : 'trips'}
+                  </p>
+                  <div className="text-xs text-purple-600">
+                    {activeTrips[0].status} • {(activeTrips[0].packageId as any)?.name || activeTrips[0].packageName}
+                  </div>
+                </div>
+              )}
+
+              {/* Help Card */}
+              <div className="bg-gradient-to-br from-gray-900 to-gray-800 text-white p-6 rounded-2xl shadow-lg">
+                <h4 className="font-bold text-lg mb-2">Need Help?</h4>
+                <p className="text-gray-300 text-sm mb-4">Contact our front desk 24/7 for assistance.</p>
+                <button
+                  onClick={handleReceptionContactClick}
+                  className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
+                >
+                  <Phone className="h-4 w-4" />
+                  Contact Support
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* 3. ACTIVE ORDERS - Full Width Card */}
+          {activeOrders.length > 0 && (
+            <section>
+              <PageCard title="Active Orders" description="Track your food and beverage orders">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {activeOrders.map((order) => {
+                    const statusColors: Record<string, string> = {
+                      Preparing: "bg-yellow-100 text-yellow-800 border-yellow-200",
+                      Ready: "bg-green-100 text-green-800 border-green-200",
+                      Served: "bg-blue-100 text-blue-800 border-blue-200",
+                    };
 
                     return (
                       <div
-                        key={booking._id}
-                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
+                        key={order._id}
+                        className="border border-gray-200 rounded-xl p-4 hover:shadow-lg transition-all bg-gradient-to-br from-white to-gray-50"
                       >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                          {/* Left Side: Room Info */}
-                          <div className="flex items-center space-x-4">
-                            <div className="p-3 bg-blue-50 rounded-xl flex-shrink-0">
-                              {getRoomTypeIcon(room?.type || "standard")}
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="p-2 bg-green-100 rounded-lg">
+                              <Utensils className="h-4 w-4 text-green-600" />
                             </div>
                             <div>
-                              <h4 className="font-semibold text-gray-900">
-                                {room
-                                  ? `Room ${room.roomNumber}`
-                                  : `Booking #${booking._id.slice(-6)}`}
-                                <span className="ml-2 text-xs text-gray-400 font-normal">#{booking._id}</span>
+                              <h4 className="font-semibold text-gray-900 text-sm">
+                                Order #{order._id.slice(-6)}
                               </h4>
-                              <p className="text-sm text-gray-500 mt-1 flex items-center">
-                                <span className="font-medium">{new Date(booking.checkIn).toLocaleDateString()}</span>
-                                <ArrowRight className="h-3 w-3 mx-2 text-gray-400" />
-                                <span className="font-medium">{new Date(booking.checkOut).toLocaleDateString()}</span>
-                              </p>
+                              {order.roomNumber && (
+                                <p className="text-xs text-gray-500">Room {order.roomNumber}</p>
+                              )}
                             </div>
                           </div>
-
-                          {/* Right Side: Status, Price & Actions */}
-                          <div className="flex flex-row items-center justify-between sm:justify-end gap-4 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 mt-2 sm:mt-0">
-
-                            {/* Status Badge */}
-                            <span
-                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${status.color}`}
-                            >
-                              <StatusIcon className="h-3 w-3 mr-1.5" />
-                              {status.text}
-                            </span>
-
-                            {/* Price - Show "Total Paid" label for completed bookings */}
-                            {displayAmount > 0 && (
-                              <div className="text-right">
-                                {isCompleted && <div className="text-xs text-gray-500">Total Paid</div>}
-                                <div className="text-sm font-bold text-gray-900">
-                                  ${displayAmount.toFixed(2)}
-                                </div>
-                                {hasDiscount && dealInfo && (
-                                  <div className="text-xs text-emerald-600 font-medium mt-0.5">
-                                    💰 {(dealInfo as any).dealName}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Cancel Button */}
-                            {isCancellable && (
-                              <button
-                                onClick={() => handleCancelClick(booking._id)}
-                                className="text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-md transition-colors border border-transparent hover:border-red-100 ml-2"
-                                title="Cancel Booking"
-                              >
-                                Cancel
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-              )}
-            </div>
-          </div>
-
-          {/* Completed Bookings Section */}
-          {completedBookings.length > 0 && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Completed Bookings
-                </h3>
-              </div>
-              <div className="space-y-4">
-                {completedBookings.slice(0, 5).map((booking) => {
-                  const room = typeof booking.roomId === 'object' ? (booking.roomId as unknown as Room) : null;
-                  const status = getBookingStatus(booking.status);
-                  const StatusIcon = status.icon;
-
-                  return (
-                    <div
-                      key={booking._id}
-                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        {/* Left Side: Room Info */}
-                        <div className="flex items-center space-x-4">
-                          <div className="p-3 bg-blue-50 rounded-xl flex-shrink-0">
-                            {getRoomTypeIcon(room?.type || "standard")}
-                          </div>
-                          <div>
-                            <h4 className="font-semibold text-gray-900">
-                              {room
-                                ? `Room ${room.roomNumber}`
-                                : `Booking #${booking._id.slice(-6)}`}
-                            </h4>
-                            <p className="text-sm text-gray-500 mt-1 flex items-center">
-                              <span className="font-medium">{new Date(booking.checkIn).toLocaleDateString()}</span>
-                              <ArrowRight className="h-3 w-3 mx-2 text-gray-400" />
-                              <span className="font-medium">{new Date(booking.checkOut).toLocaleDateString()}</span>
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Right Side: Status & Total Paid */}
-                        <div className="flex flex-row items-center justify-between sm:justify-end gap-4 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 mt-2 sm:mt-0">
-                          {/* Status Badge */}
-                          <span
-                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${status.color}`}
-                          >
-                            <StatusIcon className="h-3 w-3 mr-1.5" />
-                            {status.text}
-                          </span>
-
-                          {/* Total Paid from Invoice */}
-                          {booking.invoiceTotal && booking.invoiceTotal > 0 && (
-                            <div className="text-right">
-                              <div className="text-xs text-gray-500">Total Paid</div>
-                              <div className="text-sm font-bold text-gray-900">
-                                ${booking.invoiceTotal.toFixed(2)}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Active Orders Section */}
-          {activeOrders.length > 0 && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Active Orders
-              </h3>
-              <div className="space-y-3">
-                {activeOrders.map((order) => {
-                  const statusColors: Record<string, string> = {
-                    Preparing: "bg-yellow-100 text-yellow-800 border-yellow-200",
-                    Ready: "bg-green-100 text-green-800 border-green-200",
-                    Served: "bg-blue-100 text-blue-800 border-blue-200",
-                  };
-
-                  return (
-                    <div
-                      key={order._id}
-                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-semibold text-gray-900">
-                            Order #{order._id.slice(-6)}
-                            {order.roomNumber && (
-                              <span className="ml-2 text-sm text-gray-500">
-                                Room {order.roomNumber}
-                              </span>
-                            )}
-                          </h4>
-                          <p className="text-sm text-gray-500 mt-1">
-                            {order.items.map(item => `${item.quantity}x ${item.name}`).join(', ')}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {new Date(order.createdAt).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="text-right">
                           <span
                             className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${statusColors[order.status] || "bg-gray-100 text-gray-800 border-gray-200"
                               }`}
                           >
                             {order.status}
                           </span>
-                          <p className="text-sm font-bold text-gray-900 mt-2">
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2 line-clamp-2">
+                          {order.items.map((item) => `${item.quantity}x ${item.name}`).join(", ")}
+                        </p>
+                        <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                          <p className="text-xs text-gray-400">
+                            {new Date(order.createdAt).toLocaleString()}
+                          </p>
+                          <p className="text-sm font-bold text-gray-900">
                             ${order.totalAmount.toFixed(2)}
                           </p>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+                    );
+                  })}
+                </div>
+              </PageCard>
+            </section>
           )}
 
-          {/* Active Trip Requests Section */}
+          {/* 5. TRIP PACKAGES - Full Width Card */}
           {activeTrips.length > 0 && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Trip Packages
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {activeTrips.map((trip) => {
-                  const statusColors: Record<string, string> = {
-                    Requested: "bg-blue-100 text-blue-800 border-blue-200",
-                    Pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
-                    Confirmed: "bg-green-100 text-green-800 border-green-200",
-                    Approved: "bg-purple-100 text-purple-800 border-purple-200",
-                  };
+            <section>
+              <PageCard title="Trip Packages" description="Your adventure bookings and requests">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {activeTrips.map((trip) => {
+                    const statusColors: Record<string, string> = {
+                      Requested: "bg-blue-100 text-blue-800 border-blue-200",
+                      Pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
+                      Confirmed: "bg-green-100 text-green-800 border-green-200",
+                      Approved: "bg-purple-100 text-purple-800 border-purple-200",
+                    };
 
-                  // Get image from packageId (populated package data)
-                  const packageData = trip.packageId as any;
-                  const tripImage = packageData?.images && packageData.images.length > 0
-                    ? packageData.images[0]
-                    : (trip.image || (Array.isArray(trip.images) && trip.images.length > 0 ? trip.images[0] : null));
+                    // Get image from packageId (populated package data)
+                    const packageData = trip.packageId as any;
+                    const tripImage =
+                      packageData?.images && packageData.images.length > 0
+                        ? packageData.images[0]
+                        : trip.image ||
+                        (Array.isArray(trip.images) && trip.images.length > 0 ? trip.images[0] : null);
 
-                  // Get package name and location from packageId
-                  const packageName = packageData?.name || trip.packageName || 'Trip Request';
-                  const packageLocation = packageData?.location || trip.location;
+                    // Get package name and location from packageId
+                    const packageName = packageData?.name || trip.packageName || "Trip Request";
+                    const packageLocation = packageData?.location || trip.location;
 
-                  return (
-                    <div
-                      key={trip._id}
-                      className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow"
-                    >
-                      {/* Trip Image */}
-                      {tripImage && (
-                        <div className="h-40 bg-gray-100 overflow-hidden">
-                          <img
-                            src={tripImage}
-                            alt={packageName}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        </div>
-                      )}
-                      <div className="p-4">
-                        <div className="flex justify-between items-start gap-3 mb-3">
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-gray-900 truncate">
-                              {packageName}
-                            </h4>
-                            {packageLocation && (
-                              <p className="text-xs text-gray-500 truncate">
-                                {packageLocation}
+                    return (
+                      <div
+                        key={trip._id}
+                        className="border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg transition-all"
+                      >
+                        {/* Trip Image */}
+                        {tripImage && (
+                          <div className="h-40 bg-gray-100 overflow-hidden">
+                            <img
+                              src={tripImage}
+                              alt={packageName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = "none";
+                              }}
+                            />
+                          </div>
+                        )}
+                        <div className="p-4">
+                          <div className="flex justify-between items-start gap-3 mb-3">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-gray-900 truncate">{packageName}</h4>
+                              {packageLocation && (
+                                <p className="text-xs text-gray-500 truncate">{packageLocation}</p>
+                              )}
+                            </div>
+                            <span
+                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap flex-shrink-0 ${statusColors[trip.status] || "bg-gray-100 text-gray-800 border-gray-200"
+                                }`}
+                            >
+                              {trip.status}
+                            </span>
+                          </div>
+                          <div className="space-y-2">
+                            {trip.tripDate && (
+                              <p className="text-sm text-gray-500">
+                                Date: {new Date(trip.tripDate).toLocaleDateString()}
                               </p>
                             )}
+                            {trip.participants && (
+                              <p className="text-xs text-gray-400">Participants: {trip.participants}</p>
+                            )}
                           </div>
-                          <span
-                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap flex-shrink-0 ${statusColors[trip.status] || "bg-gray-100 text-gray-800 border-gray-200"
-                              }`}
-                          >
-                            {trip.status}
-                          </span>
-                        </div>
-                        <div className="space-y-2">
-                          {trip.tripDate && (
-                            <p className="text-sm text-gray-500">
-                              Date: {new Date(trip.tripDate).toLocaleDateString()}
-                            </p>
-                          )}
-                          {trip.participants && (
-                            <p className="text-xs text-gray-400">
-                              Participants: {trip.participants}
-                            </p>
-                          )}
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+                    );
+                  })}
+                </div>
+              </PageCard>
+            </section>
           )}
         </div>
       </div>

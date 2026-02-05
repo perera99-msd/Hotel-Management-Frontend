@@ -1,9 +1,9 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { collection, query, orderBy, limit, onSnapshot, doc, updateDoc, where, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
+import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 
 export interface NotificationItem {
@@ -31,12 +31,12 @@ const NotificationContext = createContext<NotificationContextType | null>(null);
 
 export const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-    const { user, profile } = useAuth(); 
-    
+    const { user, profile } = useAuth();
+
     // Track when the page loaded to prevent old sounds from playing
     const mountTimeRef = useRef(Date.now());
     const seenIdsRef = useRef<Set<string>>(new Set());
-    
+
     // Audio ref to keep the instance available
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -64,13 +64,13 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
                 if (change.type === 'added') {
                     const data = change.doc.data();
                     const docTime = data.createdAt?.seconds ? data.createdAt.seconds * 1000 : Date.now();
-                    
+
                     // Check if notification is new (arrived after page load & within last 30s)
                     const isRecent = docTime > mountTimeRef.current && (Date.now() - docTime) < 30000;
-                    
+
                     if (!data.read && isRecent && !seenIdsRef.current.has(change.doc.id)) {
                         shouldPlaySound = true;
-                        
+
                         // Show visual toast
                         toast.success(data.title, {
                             duration: 5000,
@@ -85,34 +85,18 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
             setNotifications((prev) => {
                 const merged = new Map<string, NotificationItem>();
                 prev.forEach((n) => merged.set(n.id, n));
-                
-                const isCustomer = roleFilter.includes('customer') && roleFilter.length === 1;
-                const isStaff = roleFilter.some(r => ['admin', 'receptionist', 'manager'].includes(r));
-                
+
                 snapshot.docs.forEach((doc: any) => {
                     const data = doc.data() as NotificationItem;
-                    
-                    // Filter out notifications not intended for this user type
-                    if (isCustomer && !isStaff) {
-                        // Customer should only see notifications with 'customer' in targetRoles or their userId
-                        const hasCustomerRole = data.targetRoles?.includes('customer');
-                        const isPersonal = data.targetUserId === (profile as any)._id;
-                        if (!hasCustomerRole && !isPersonal) return;
-                    } else if (isStaff && !isCustomer) {
-                        // Staff should not see customer-only notifications
-                        const isCustomerOnly = data.targetRoles?.length === 1 && data.targetRoles[0] === 'customer';
-                        if (isCustomerOnly) return;
-                    }
-                    
                     merged.set(doc.id, { ...data, id: doc.id } as NotificationItem);
                 });
-                
+
                 const next = Array.from(merged.values()).sort((a, b) => {
                     const aTime = a.createdAt?.seconds || 0;
                     const bTime = b.createdAt?.seconds || 0;
                     return bTime - aTime;
                 });
-                
+
                 // Add to seen set to prevent duplicate alerts
                 next.forEach((n) => seenIdsRef.current.add(n.id));
                 return next;
@@ -125,29 +109,32 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
             console.error('Notification Listener Error:', error);
         };
 
-        // 1. Role-based Listener
-        const roleQuery = query(
-            collection(db, 'notifications'),
-            where('targetRoles', 'array-contains-any', roleFilter),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-        );
+        const isCustomer = roleFilter.includes('customer') && roleFilter.length === 1;
+        const isStaff = roleFilter.some(r => ['admin', 'receptionist', 'manager'].includes(r));
 
-        unsubscribers.push(onSnapshot(roleQuery, handleSnapshot, handleError));
-
-        // 2. User-specific Listener
-        if ((profile as any)._id) {
-            const personalQuery = query(
+        // For customers: Only show notifications with their userId or targetUserId
+        if (isCustomer && !isStaff && (profile as any)._id) {
+            const customerQuery = query(
                 collection(db, 'notifications'),
                 where('userId', '==', (profile as any)._id),
                 orderBy('createdAt', 'desc'),
                 limit(50)
             );
-            unsubscribers.push(onSnapshot(personalQuery, handleSnapshot, handleError));
+            unsubscribers.push(onSnapshot(customerQuery, handleSnapshot, handleError));
+        } else {
+            // For staff: Show role-based notifications
+            const roleQuery = query(
+                collection(db, 'notifications'),
+                where('targetRoles', 'array-contains-any', roleFilter),
+                orderBy('createdAt', 'desc'),
+                limit(50)
+            );
+
+            unsubscribers.push(onSnapshot(roleQuery, handleSnapshot, handleError));
         }
 
         return () => unsubscribers.forEach((unsub) => unsub());
-    }, [user, profile]); 
+    }, [user, profile]);
 
     const playSound = () => {
         try {
@@ -178,9 +165,9 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
         setNotifications(prev => prev.map(n => ({ ...n, read: true })));
         const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
         unreadIds.forEach(async (id) => {
-             try {
+            try {
                 await updateDoc(doc(db, 'notifications', id), { read: true });
-             } catch (e) { console.error(e) }
+            } catch (e) { console.error(e) }
         });
     };
 
