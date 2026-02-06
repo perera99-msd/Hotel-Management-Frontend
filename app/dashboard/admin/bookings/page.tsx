@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
-import NewBookingModal from "../../../components/bookings/NewBookingModal";
-import ExtendStayModal from "../../../components/bookings/ExtendStayModal";
+import { auth } from "@/app/lib/firebase";
+import { Calendar, CheckCircle, List, LogOut, UserCheck, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import BookingCalendar from "../../../components/bookings/BookingCalendar";
 import BookingList from "../../../components/bookings/BookingList";
-import { Calendar, CheckCircle, UserCheck, LogOut, List } from "lucide-react";
-import { auth } from "@/app/lib/firebase";
-import toast from "react-hot-toast";
+import ExtendStayModal from "../../../components/bookings/ExtendStayModal";
+import NewBookingModal from "../../../components/bookings/NewBookingModal";
+import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 
 // Matches Backend Response Structure
 export interface Booking {
@@ -36,12 +36,13 @@ export interface Booking {
 export default function BookingsPage() {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
-  
+
   // Data State
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [extendStayBooking, setExtendStayBooking] = useState<Booking | null>(null);
+  const [viewingBooking, setViewingBooking] = useState<Booking | null>(null);
 
   // Fetch Bookings Wrapped in useCallback to use in dependencies
   const fetchBookings = useCallback(async () => {
@@ -63,10 +64,10 @@ export default function BookingsPage() {
           headers: { Authorization: `Bearer ${token}` }
         });
         const invoices = invoicesRes.ok ? await invoicesRes.json() : [];
-        
+
         // Map _id to id for frontend compatibility and attach invoice status
         const mappedData = data.map((b: any) => {
-          const invoice = invoices.find((inv: any) => 
+          const invoice = invoices.find((inv: any) =>
             (inv.bookingId?._id || inv.bookingId)?.toString() === b._id?.toString()
           );
           return {
@@ -138,34 +139,34 @@ export default function BookingsPage() {
 
   const handleCheckOut = async (booking: Booking) => {
     try {
-        const user = auth.currentUser;
-        if (!user) return;
-        const token = await user.getIdToken();
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-  
-        const res = await fetch(`${API_URL}/api/bookings/${booking.id}/checkout`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` }
-        });
-  
-        if (res.ok) {
-          toast.success("Guest Checked Out Successfully");
-          // Refetch bookings immediately, then again after small delay to ensure all updates propagate
-          await fetchBookings();
-          setTimeout(() => fetchBookings(), 800);
-        } else {
-          const errText = await res.text();
-          try {
-            const err = JSON.parse(errText);
-            toast.error(err.error || `Check-out failed: ${res.status}`);
-          } catch {
-            toast.error(`Check-out failed: ${res.status} ${res.statusText}`);
-          }
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+      const res = await fetch(`${API_URL}/api/bookings/${booking.id}/checkout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        toast.success("Guest Checked Out Successfully");
+        // Refetch bookings immediately, then again after small delay to ensure all updates propagate
+        await fetchBookings();
+        setTimeout(() => fetchBookings(), 800);
+      } else {
+        const errText = await res.text();
+        try {
+          const err = JSON.parse(errText);
+          toast.error(err.error || `Check-out failed: ${res.status}`);
+        } catch {
+          toast.error(`Check-out failed: ${res.status} ${res.statusText}`);
         }
-      } catch (e) { 
-        console.error("Checkout error:", e); 
-        toast.error("Check-out error - please try again"); 
       }
+    } catch (e) {
+      console.error("Checkout error:", e);
+      toast.error("Check-out error - please try again");
+    }
   };
 
   const handleEditBooking = (booking: Booking) => {
@@ -174,9 +175,20 @@ export default function BookingsPage() {
     setIsNewBookingOpen(true);
   };
 
+  const isEditableBooking = (booking: Booking) =>
+    booking.status === "Confirmed" || booking.status === "Pending";
+
+  const handleCalendarBookingClick = (booking: Booking) => {
+    if (isEditableBooking(booking)) {
+      handleEditBooking(booking);
+      return;
+    }
+    setViewingBooking(booking);
+  };
+
   // Called when Modal saves successfully
   const handleUpdateSuccess = () => {
-    fetchBookings(); 
+    fetchBookings();
     setIsNewBookingOpen(false);
     setEditingBooking(null);
   };
@@ -187,26 +199,26 @@ export default function BookingsPage() {
   };
 
   const handleCancelBooking = async (booking: Booking) => {
-    if(!confirm("Are you sure you want to cancel this booking?")) return;
-    
+    if (!confirm("Are you sure you want to cancel this booking?")) return;
+
     try {
-        const user = auth.currentUser;
-        if (!user) return;
-        const token = await user.getIdToken();
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-  
-        const res = await fetch(`${API_URL}/api/bookings/${booking.id}`, {
-          method: "DELETE", // Or PUT { status: 'Cancelled' } depending on backend
-          headers: { Authorization: `Bearer ${token}` }
-        });
-  
-        if (res.ok) {
-          toast.success("Booking Cancelled");
-          fetchBookings();
-        } else {
-          toast.error("Cancellation failed");
-        }
-      } catch (e) { console.error(e); }
+      const user = auth.currentUser;
+      if (!user) return;
+      const token = await user.getIdToken();
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+
+      const res = await fetch(`${API_URL}/api/bookings/${booking.id}`, {
+        method: "DELETE", // Or PUT { status: 'Cancelled' } depending on backend
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        toast.success("Booking Cancelled");
+        fetchBookings();
+      } else {
+        toast.error("Cancellation failed");
+      }
+    } catch (e) { console.error(e); }
   };
 
   const handleExtendStay = (booking: Booking) => {
@@ -291,11 +303,11 @@ export default function BookingsPage() {
         {/* Dynamic Content */}
         <div className="max-w-8xl mx-auto">
           {loading ? (
-             <div className="text-center py-12">Loading...</div>
+            <div className="text-center py-12">Loading...</div>
           ) : viewMode === 'calendar' ? (
             <BookingCalendar
               bookings={bookings}
-              onBookingClick={handleEditBooking}
+              onBookingClick={handleCalendarBookingClick}
             />
           ) : (
             <div className="space-y-4">
@@ -333,6 +345,93 @@ export default function BookingsPage() {
         booking={extendStayBooking}
         onExtendSuccess={fetchBookings}
       />
+
+      {viewingBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-gray-900/30 backdrop-blur-sm transition-opacity"
+            onClick={() => setViewingBooking(null)}
+          />
+
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-gray-50 border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Booking Details</h3>
+                <p className="text-sm text-gray-500">
+                  ID: #{(viewingBooking.id || viewingBooking._id || "").toString().slice(-6).toUpperCase()}
+                </p>
+              </div>
+              <button
+                onClick={() => setViewingBooking(null)}
+                className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-500"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="bg-blue-100 p-3 rounded-full">
+                  <UserCheck className="h-6 w-6 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-lg font-bold text-gray-900">
+                    {typeof viewingBooking.guestId === "object" && viewingBooking.guestId !== null
+                      ? viewingBooking.guestId.name
+                      : "Guest"}
+                  </h4>
+                  <div className="text-sm text-gray-500 flex flex-col mt-1 space-y-0.5">
+                    {typeof viewingBooking.guestId === "object" && viewingBooking.guestId !== null && (
+                      <span>{viewingBooking.guestId.email}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="px-3 py-1 rounded-full text-xs font-bold border bg-gray-100 text-gray-600 border-gray-200">
+                  {viewingBooking.status}
+                </div>
+              </div>
+
+              <div className="h-px bg-gray-100" />
+
+              <div className="grid grid-cols-2 gap-x-8 gap-y-6 text-sm">
+                <div>
+                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Room</label>
+                  <div className="font-semibold text-gray-900 text-base">
+                    {typeof viewingBooking.roomId === "object" && viewingBooking.roomId !== null
+                      ? viewingBooking.roomId.roomNumber
+                      : "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Amount</label>
+                  <div className="font-semibold text-gray-900 text-base">
+                    ${Number(viewingBooking.totalAmount || 0).toFixed(2)}
+                  </div>
+                </div>
+                <div className="col-span-2 grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Check In</label>
+                    <div className="font-semibold text-gray-900">{new Date(viewingBooking.checkIn).toLocaleDateString()}</div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Check Out</label>
+                    <div className="font-semibold text-gray-900">{new Date(viewingBooking.checkOut).toLocaleDateString()}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 border-t border-gray-100 p-4 flex justify-end">
+              <button
+                onClick={() => setViewingBooking(null)}
+                className="px-5 py-2.5 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:text-gray-900 shadow-sm transition-all"
+              >
+                Close Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminReceptionistLayout>
   );
 }

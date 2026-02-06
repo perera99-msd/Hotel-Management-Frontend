@@ -5,13 +5,18 @@ import dayjs from "dayjs";
 import { MoreVertical, RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import GuestDetailsModal from "../../../components/guest/GuestDetailsModal";
+import GuestModel from "../../../components/guest/guestmodel";
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 import { useAuth } from "../../../context/AuthContext";
 
 interface Reservation {
     id: string;
     mongoId: string;
+    guestId?: string;
     name: string;
+    guestEmail?: string;
+    guestPhone?: string;
+    guestIdNumber?: string;
     roomNumber: string;
     checkIn: string;
     checkOut: string;
@@ -31,8 +36,13 @@ export default function GuestPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const itemsPerPage = 10;
     const [openMenu, setOpenMenu] = useState<number | null>(null);
+    const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+    const [selectedGuest, setSelectedGuest] = useState<any | null>(null);
     const [guestDetails, setGuestDetails] = useState<any | null>(null);
+    const [isDeleting, setIsDeleting] = useState<string | null>(null);
+    const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
 
     const fetchReservations = async () => {
         if (!token) return;
@@ -88,7 +98,11 @@ export default function GuestPage() {
                         id: `#${b._id.slice(-4).toUpperCase()}`,
                         mongoId: b._id,
                         name: b.guestId?.name || 'Unknown Guest',
-                        roomNumber: b.roomId?.number || 'N/A',
+                        guestId: typeof b.guestId === 'object' && b.guestId !== null ? b.guestId._id : b.guestId,
+                        guestEmail: typeof b.guestId === 'object' && b.guestId !== null ? b.guestId.email : undefined,
+                        guestPhone: typeof b.guestId === 'object' && b.guestId !== null ? b.guestId.phone : undefined,
+                        guestIdNumber: typeof b.guestId === 'object' && b.guestId !== null ? b.guestId.idNumber : undefined,
+                        roomNumber: b.roomId?.roomNumber || b.roomId?.number || 'N/A',
                         checkIn: b.checkIn,
                         checkOut: b.checkOut,
                         roomType: b.roomId?.type || 'Standard',
@@ -131,34 +145,74 @@ export default function GuestPage() {
         return filtered;
     };
 
-    const handleViewGuestDetails = async (mongoId: string) => {
+    const handleViewGuest = (reservation: Reservation) => {
+        const checkIn = dayjs(reservation.checkIn);
+        const checkOut = dayjs(reservation.checkOut);
+        const nights = checkOut.diff(checkIn, 'day');
+
+        setSelectedGuest({
+            name: reservation.name,
+            registrationNumber: reservation.id,
+            roomNumber: reservation.roomNumber,
+            checkInDate: checkIn.format('YYYY-MM-DD'),
+            roomType: reservation.roomType,
+            stay: `${nights} Nights`,
+            discount: reservation.discount,
+            totalAmount: reservation.totalAmount,
+            amountPaid: reservation.amountPaid,
+            status: reservation.status
+        });
+        setIsGuestModalOpen(true);
+    };
+
+    const handleViewGuestDetails = (reservation: Reservation) => {
+        setGuestDetails({
+            _id: reservation.guestId,
+            name: reservation.name || 'Unknown',
+            email: reservation.guestEmail || 'N/A',
+            phone: reservation.guestPhone || 'N/A',
+            idNumber: reservation.guestIdNumber || 'N/A',
+            checkIn: reservation.checkIn,
+            checkOut: reservation.checkOut,
+            roomNumber: reservation.roomNumber || 'N/A',
+            roomType: reservation.roomType || 'N/A',
+            totalAmount: reservation.totalAmount || 0,
+            status: reservation.status
+        });
+        setIsDetailsModalOpen(true);
+    };
+
+    const handleDelete = async (reservationId: string) => {
+        if (!window.confirm("Are you sure you want to delete this reservation?")) {
+            setOpenMenu(null);
+            return;
+        }
+        setIsDeleting(reservationId);
+        setDeleteError(null);
+
         try {
-            if (!token) return;
-            const bookingRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/bookings/${mongoId}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/bookings/${reservationId}`, {
+                method: "DELETE",
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
             });
 
-            if (bookingRes.ok) {
-                const booking = await bookingRes.json();
-                const guest = booking.guestId || {};
-
-                setGuestDetails({
-                    _id: guest._id,
-                    name: guest.name || 'Unknown',
-                    email: guest.email || 'N/A',
-                    phone: guest.phone || 'N/A',
-                    idNumber: guest.idNumber || 'N/A',
-                    checkIn: booking.checkIn,
-                    checkOut: booking.checkOut,
-                    roomNumber: booking.roomId?.roomNumber || 'N/A',
-                    roomType: booking.roomId?.type || 'N/A',
-                    totalAmount: booking.roomTotal || 0,
-                    status: booking.status
-                });
-                setIsDetailsModalOpen(true);
+            if (response.ok) {
+                setReservations(prev => prev.filter(res => res.mongoId !== reservationId));
+                setShowDeleteSuccess(true);
+                setTimeout(() => setShowDeleteSuccess(false), 3000);
+            } else {
+                throw new Error("Failed to delete");
             }
         } catch (error) {
-            console.error("Failed to fetch guest details:", error);
+            console.log("Delete failed", error);
+            setDeleteError("Failed to delete reservation.");
+            setTimeout(() => setDeleteError(null), 5000);
+        } finally {
+            setIsDeleting(null);
+            setOpenMenu(null);
         }
     };
 
@@ -180,6 +234,8 @@ export default function GuestPage() {
     return (
         <AdminReceptionistLayout role="receptionist">
             <div className="p-6 bg-gray-50 min-h-screen">
+                {showDeleteSuccess && <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg">Reservation deleted!</div>}
+                {deleteError && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">{deleteError}</div>}
                 <div className="flex items-center justify-between mb-8">
                     <h1 className="text-3xl font-bold text-gray-900">Guest Management</h1>
                     <button onClick={fetchReservations} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="Refresh">
@@ -250,8 +306,12 @@ export default function GuestPage() {
                                         className="h-5 w-5 text-gray-500 cursor-pointer hover:text-gray-700"
                                     />
                                     {openMenu === index && (
-                                        <div className="absolute right-0 top-8 w-40 bg-white shadow-2xl rounded-lg border border-gray-200 z-50">
-                                            <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => { handleViewGuestDetails(reservation.mongoId); setOpenMenu(null); }}>View Details</button>
+                                        <div className="absolute right-0 top-8 w-44 bg-white shadow-2xl rounded-lg border border-gray-200 z-50">
+                                            <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100 border-b" onClick={() => { handleViewGuest(reservation); setOpenMenu(null); }}>Booking Details</button>
+                                            <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100 border-b" onClick={() => { handleViewGuestDetails(reservation); setOpenMenu(null); }}>Guest Details</button>
+                                            <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100" onClick={() => handleDelete(reservation.mongoId)}>
+                                                {isDeleting === reservation.mongoId ? 'Deleting...' : 'Delete'}
+                                            </button>
                                         </div>
                                     )}
                                 </div>
@@ -282,6 +342,7 @@ export default function GuestPage() {
                 )}
             </div>
 
+            <GuestModel isOpen={isGuestModalOpen} onClose={() => setIsGuestModalOpen(false)} guestData={selectedGuest} />
             <GuestDetailsModal isOpen={isDetailsModalOpen} onClose={() => setIsDetailsModalOpen(false)} guestData={guestDetails} />
         </AdminReceptionistLayout>
     );

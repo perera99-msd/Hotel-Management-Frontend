@@ -15,8 +15,9 @@ type RoomStatus =
   | "available"
   | "occupied"
   | "reserved"
-  | "cleaning"
-  | "maintenance";
+  | "needs cleaning"
+  | "maintenance"
+  | "out of order";
 
 type RoomType = "single" | "double" | "suite" | "family";
 
@@ -104,20 +105,27 @@ export default function Rooms() {
 
       if (res.ok) {
         const data = await res.json();
-        const mappedRooms = data.map((r: any) => ({
-          id: r._id,
-          name: r.name,
-          number: r.roomNumber,
-          type: r.type,
-          tier: r.tier || 'Normal',
-          status: r.status.toLowerCase(),
-          rate: r.rate,
-          amenities: r.amenities,
-          maxOccupancy: r.maxOccupancy,
-          floor: r.floor,
-          images: r.images || [], // ✅ Include images
-          computedStatus: r.computedStatus
-        }));
+        const mappedRooms = data.map((r: any) => {
+          // Use computedStatus if available, otherwise use status
+          const actualStatus = r.computedStatus || r.status;
+          // Normalize status to lowercase and handle "Needs Cleaning" -> "needs cleaning"
+          let normalizedStatus = actualStatus.toLowerCase();
+
+          return {
+            id: r._id,
+            name: r.name,
+            number: r.roomNumber,
+            type: r.type,
+            tier: r.tier || 'Normal',
+            status: normalizedStatus,
+            rate: r.rate,
+            amenities: r.amenities,
+            maxOccupancy: r.maxOccupancy,
+            floor: r.floor,
+            images: r.images || [], // ✅ Include images
+            computedStatus: r.computedStatus
+          };
+        });
 
         setRooms(mappedRooms);
       } else {
@@ -230,6 +238,7 @@ export default function Rooms() {
   };
 
   const handleStatusChange = async (roomId: string, newStatus: RoomStatus) => {
+    // Optimistically update UI
     setRooms((prev) =>
       prev.map((room) =>
         room.id === roomId ? { ...room, status: newStatus } : room
@@ -242,7 +251,16 @@ export default function Rooms() {
       const token = await user.getIdToken();
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
-      const backendStatus = newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
+      // Convert frontend status to backend format
+      const statusMap: { [key: string]: string } = {
+        'available': 'Available',
+        'occupied': 'Occupied',
+        'reserved': 'Reserved',
+        'needs cleaning': 'Needs Cleaning',
+        'maintenance': 'Maintenance',
+        'out of order': 'Out of Order'
+      };
+      const backendStatus = statusMap[newStatus] || 'Available';
 
       await fetch(`${API_URL}/api/rooms/${roomId}/status`, {
         method: 'PATCH',
@@ -252,6 +270,11 @@ export default function Rooms() {
         },
         body: JSON.stringify({ status: backendStatus })
       });
+
+      toast.success(`Room status updated to ${backendStatus}`);
+
+      // Fetch fresh data to get correct computedStatus from backend
+      fetchRooms();
     } catch (error) {
       console.error("Status update failed", error);
       toast.error("Failed to update status on server");
@@ -290,8 +313,10 @@ export default function Rooms() {
     total: rooms.length,
     available: rooms.filter((r) => r.status === "available").length,
     occupied: rooms.filter((r) => r.status === "occupied").length,
-    cleaning: rooms.filter((r) => r.status === "cleaning").length,
+    reserved: rooms.filter((r) => r.status === "reserved").length,
+    cleaning: rooms.filter((r) => r.status === "needs cleaning").length,
     maintenance: rooms.filter((r) => r.status === "maintenance").length,
+    outOfOrder: rooms.filter((r) => r.status === "out of order").length,
   };
 
   const statusOptions = [
@@ -299,8 +324,9 @@ export default function Rooms() {
     { value: "available", label: "Available" },
     { value: "occupied", label: "Occupied" },
     { value: "reserved", label: "Reserved" },
-    { value: "cleaning", label: "Needs Cleaning" },
+    { value: "needs cleaning", label: "Needs Cleaning" },
     { value: "maintenance", label: "Maintenance" },
+    { value: "out of order", label: "Out of Order" },
   ];
 
   const typeOptions = [

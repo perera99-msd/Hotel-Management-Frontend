@@ -7,7 +7,6 @@ import {
   CheckCircle,
   Clock,
   Coffee,
-  Copy,
   Edit,
   Eye,
   LogOut,
@@ -30,14 +29,11 @@ export interface Room {
   roomNumber?: string; // Added fallback
   type: "single" | "double" | "suite" | "family";
   tier?: "Deluxe" | "Normal";
-  status: "available" | "occupied" | "reserved" | "cleaning" | "maintenance";
+  status: "available" | "occupied" | "reserved" | "needs cleaning" | "maintenance" | "out of order";
   rate: number;
   amenities: string[];
   maxOccupancy: number;
   floor: number;
-  needsCleaning?: boolean;
-  cleaningNotes?: string;
-  lastCleaned?: Date;
   images?: string[]; // ✅ Added images field
   computedStatus?: string; // ✅ Added computed status from backend
 }
@@ -183,7 +179,16 @@ function RoomCard({
 
     try {
       const token = await getToken();
-      const backendStatus = status.charAt(0).toUpperCase() + status.slice(1);
+      // Convert frontend status to backend format
+      const statusMap: { [key: string]: string } = {
+        'available': 'Available',
+        'occupied': 'Occupied',
+        'reserved': 'Reserved',
+        'needs cleaning': 'Needs Cleaning',
+        'maintenance': 'Maintenance',
+        'out of order': 'Out of Order'
+      };
+      const backendStatus = statusMap[status.toLowerCase()] || status.charAt(0).toUpperCase() + status.slice(1);
       const endpoint = `${API_URL}/api/rooms/${rId}/status`;
 
       const response = await fetch(endpoint, {
@@ -198,7 +203,7 @@ function RoomCard({
       });
 
       if (!response.ok) throw new Error(`API Error: ${response.status}`);
-      toast.success(`Status updated to ${status}`);
+      toast.success(`Status updated to ${backendStatus}`);
 
     } catch (error) {
       console.error("Failed to update room status:", error);
@@ -342,7 +347,8 @@ function RoomCard({
   };
 
   // ✅ Use computedStatus if available, otherwise use status
-  const displayStatus = room.computedStatus || room.status;
+  // Normalize to lowercase for consistent comparison
+  const displayStatus = (room.computedStatus || room.status).toLowerCase();
   const statusConfig = getStatusConfig(displayStatus);
   const StatusIcon = statusConfig.icon;
   const tierConfig = getTierConfig(room.tier);
@@ -351,22 +357,36 @@ function RoomCard({
   const roomImage = room.images && room.images.length > 0 ? room.images[0] : null;
 
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
+      if (statusMenuRef.current && !statusMenuRef.current.contains(event.target as Node)) {
+        setShowStatusMenu(false);
+      }
     };
-    if (showDropdown) document.addEventListener("mousedown", handleClickOutside);
+    if (showDropdown || showStatusMenu) document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showDropdown]);
+  }, [showDropdown, showStatusMenu]);
+
+  // Quick status change handler with toast
+  const quickStatusChange = async (status: string) => {
+    setShowStatusMenu(false);
+    // Normalize to lowercase for frontend
+    const normalizedStatus = status.toLowerCase();
+    await handleStatusChange(roomId!, normalizedStatus);
+    // No reload needed - parent component will handle state update
+  };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col h-full">
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow overflow-visible flex flex-col h-full">
       {/* ✅ Room Image Header */}
-      <div className="relative h-36 w-full bg-gray-200">
+      <div className="relative h-36 w-full bg-gray-200 overflow-hidden">
         {roomImage ? (
           <img
             src={roomImage}
@@ -457,7 +477,7 @@ function RoomCard({
         )}
 
         {/* Guest Information - if occupied */}
-        {guest && displayStatus.toLowerCase() === "occupied" && (
+        {guest && displayStatus === "occupied" && (
           <div className="mb-3 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
             <div className="flex items-center space-x-2 mb-1">
               <User className="h-4 w-4 text-gray-700" />
@@ -482,21 +502,72 @@ function RoomCard({
 
           {/* Action Buttons */}
           <div className="flex flex-wrap gap-2">
-            {/* Make Available */}
-            {(displayStatus.toLowerCase() === "needs cleaning" ||
-              displayStatus.toLowerCase() === "cleaning" ||
-              displayStatus.toLowerCase() === "maintenance") && onStatusChange && (
-                <button
-                  onClick={() => handleStatusChange(roomId!, "Available")}
-                  className="bg-green-100 hover:bg-green-200 text-green-800 border border-green-200 px-3 py-2 rounded-lg flex items-center justify-center gap-1 text-xs font-semibold transition"
-                  title="Mark as Available"
-                >
-                  <CheckCircle className="h-4 w-4" />
-                  Available
-                </button>
-              )}
+            {/* Make Available Button - Only show when NOT available */}
+            {displayStatus !== "available" && displayStatus !== "occupied" && (
+              <button
+                onClick={() => quickStatusChange("Available")}
+                className="bg-green-100 hover:bg-green-200 text-green-800 border border-green-200 px-3 py-2 rounded-lg flex items-center justify-center gap-1 text-xs font-semibold transition"
+                title="Mark as Available"
+              >
+                <CheckCircle className="h-4 w-4" />
+                Make Available
+              </button>
+            )}
 
-            {displayStatus.toLowerCase() === "occupied" && onCheckOut && (
+            {/* Quick Status Change Dropdown */}
+            <div className="relative" ref={statusMenuRef}>
+              <button
+                onClick={() => setShowStatusMenu(!showStatusMenu)}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800 border border-gray-200 px-3 py-2 rounded-lg flex items-center justify-center gap-1 text-xs font-semibold transition"
+                title="Change Status"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                Change Status
+              </button>
+              {showStatusMenu && (
+                <div className="absolute left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                  <div className="py-1">
+                    <button
+                      onClick={() => quickStatusChange("Available")}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-green-50 text-green-700 font-medium flex items-center gap-2"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      Available
+                    </button>
+                    <button
+                      onClick={() => quickStatusChange("Reserved")}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-amber-50 text-amber-700 font-medium flex items-center gap-2"
+                    >
+                      <Clock className="h-4 w-4" />
+                      Reserved
+                    </button>
+                    <button
+                      onClick={() => quickStatusChange("Needs Cleaning")}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-orange-50 text-orange-700 font-medium flex items-center gap-2"
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                      Needs Cleaning
+                    </button>
+                    <button
+                      onClick={() => quickStatusChange("Maintenance")}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-purple-50 text-purple-700 font-medium flex items-center gap-2"
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                      Maintenance
+                    </button>
+                    <button
+                      onClick={() => quickStatusChange("Out of Order")}
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 text-red-700 font-medium flex items-center gap-2"
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                      Out of Order
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {displayStatus === "occupied" && onCheckOut && (
               <button
                 onClick={() => handleCheckOut(room)}
                 className="bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-200 px-3 py-2 rounded-lg flex items-center justify-center gap-1 text-xs font-semibold transition"
@@ -523,17 +594,6 @@ function RoomCard({
               <Edit className="h-4 w-4" />
               Edit
             </button>
-
-            {onDuplicate && (
-              <button
-                onClick={() => onDuplicate(room)}
-                className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 border border-indigo-200 px-3 py-2 rounded-lg flex items-center justify-center gap-1 text-xs font-semibold transition"
-                title="Duplicate Room"
-              >
-                <Copy className="h-4 w-4" />
-                Duplicate
-              </button>
-            )}
 
             {onDelete && (
               <button

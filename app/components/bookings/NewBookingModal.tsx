@@ -280,7 +280,7 @@ export default function NewBookingModal({
     // Check date logic
     const checkInDate = new Date(formData.checkIn);
     const checkOutDate = new Date(formData.checkOut);
-    if (checkOutDate <= checkInDate) {
+    if (checkOutDate < checkInDate) {
       toast.error("Check-out after check-in");
       return;
     }

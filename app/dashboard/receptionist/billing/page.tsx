@@ -1,27 +1,27 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
-import { Plus, FileText, Loader2, X } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
+import { format } from "date-fns";
+import { FileText, Loader2, Plus, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import BillCard, { Bill } from "../../../components/billing/BillCard";
-import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
+import BillCreation from "../../../components/billing/BillCreation";
 import BillFilters from "../../../components/billing/BillFilters";
 import QuickActions from "../../../components/billing/QuickActions";
-import BillCreation from "../../../components/billing/BillCreation";
-import { format } from "date-fns";
-import toast from "react-hot-toast";
+import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 
 export default function Billing() {
   const { user } = useAuth();
   const [bills, setBills] = useState<Bill[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [guests, setGuests] = useState<any[]>([]);
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
-  
+
   const [showBillForm, setShowBillForm] = useState(false);
   const [showPaymentSummary, setShowPaymentSummary] = useState(false);
   const [billToView, setBillToView] = useState<Bill | null>(null);
@@ -29,15 +29,38 @@ export default function Billing() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
+  const matchesDateFilter = (billDate: Date) => {
+    const now = new Date();
+    if (dateFilter === "today") {
+      return billDate.toDateString() === now.toDateString();
+    }
+    if (dateFilter === "week") {
+      const weekAgo = new Date();
+      weekAgo.setDate(now.getDate() - 7);
+      return billDate >= weekAgo;
+    }
+    if (dateFilter === "month") {
+      const monthAgo = new Date();
+      monthAgo.setMonth(now.getMonth() - 1);
+      return billDate >= monthAgo;
+    }
+    if (dateFilter === "year") {
+      const yearAgo = new Date();
+      yearAgo.setFullYear(now.getFullYear() - 1);
+      return billDate >= yearAgo;
+    }
+    return true;
+  };
+
   // --- 1. FETCH DATA FROM BACKEND ---
   useEffect(() => {
     const fetchData = async () => {
       if (!user) return;
-      
+
       try {
         setIsLoading(true);
         const token = await user.getIdToken();
-        const headers = { 
+        const headers = {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         };
@@ -46,20 +69,21 @@ export default function Billing() {
         const userRes = await fetch(`${API_URL}/api/users`, { headers });
         const userData = await userRes.json();
         if (Array.isArray(userData)) {
-            setGuests(userData.map((u: any) => ({
-                id: u._id,
-                name: u.name || u.email,
-                email: u.email
-            })));
+          setGuests(userData.map((u: any) => ({
+            id: u._id,
+            name: u.name || u.email,
+            email: u.email
+          })));
         }
 
         // B. Fetch Bookings
         const bookRes = await fetch(`${API_URL}/api/bookings`, { headers });
         const bookData = await bookRes.json();
         if (Array.isArray(bookData)) {
-          setBookings(bookData.map((b: any) => ({
+          const filteredBookings = bookData.filter((b: any) => b.status !== 'Cancelled');
+          setBookings(filteredBookings.map((b: any) => ({
             id: b._id,
-            guestId: b.guestId?._id || b.guestId, 
+            guestId: b.guestId?._id || b.guestId,
             roomNumber: b.roomId?.roomNumber || "N/A",
             status: b.status
           })));
@@ -69,15 +93,18 @@ export default function Billing() {
         const invRes = await fetch(`${API_URL}/api/invoices`, { headers });
         const invData = await invRes.json();
         if (Array.isArray(invData)) {
-            const mappedBills: Bill[] = invData.map((inv: any) => ({
+          const mappedBills: Bill[] = invData
+            .filter((inv: any) => (inv.status || '').toLowerCase() !== 'cancelled')
+            .filter((inv: any) => (inv.bookingId?.status || '').toLowerCase() !== 'cancelled')
+            .map((inv: any) => ({
               id: inv._id,
               bookingId: inv.bookingId?._id || "N/A",
               guestId: inv.bookingId?.guestId?._id || inv.guestId || "Unknown",
-              guestName: inv.bookingId?.guestId?.name || "Unknown Guest", 
+              guestName: inv.bookingId?.guestId?.name || "Unknown Guest",
               items: inv.lineItems.map((item: any) => ({
                 description: item.description,
                 quantity: item.qty || 1,
-                rate: (item.amount / (item.qty || 1)), 
+                rate: (item.amount / (item.qty || 1)),
                 amount: item.amount,
                 category: item.category || 'other',
                 source: item.source
@@ -90,13 +117,13 @@ export default function Billing() {
               createdAt: new Date(inv.createdAt),
               paidAt: inv.paidAt ? new Date(inv.paidAt) : undefined
             }));
-            setBills(mappedBills);
+          setBills(mappedBills);
 
-            // Annotate bookings with invoice status for dropdown clarity
-            setBookings((prev) => prev.map((b) => {
-              const related = invData.find((inv: any) => (inv.bookingId?._id || inv.bookingId)?.toString() === b.id.toString());
-              return { ...b, invoiceStatus: related?.status };
-            }));
+          // Annotate bookings with invoice status for dropdown clarity
+          setBookings((prev) => prev.map((b) => {
+            const related = invData.find((inv: any) => (inv.bookingId?._id || inv.bookingId)?.toString() === b.id.toString());
+            return { ...b, invoiceStatus: related?.status };
+          }));
         }
 
       } catch (error) {
@@ -114,47 +141,35 @@ export default function Billing() {
     return bills.filter((bill) => {
       const guest = guests.find((g) => g.id === bill.guestId);
       const guestName = (guest?.name || (bill as any).guestName || "").toLowerCase();
-      
+
       const matchesSearch =
         guestName.includes(searchTerm.toLowerCase()) ||
         bill.id.toLowerCase().includes(searchTerm.toLowerCase());
-        
+
       const matchesStatus =
         statusFilter === "all" || bill.status === statusFilter;
 
-      let matchesDate = true;
-      const billDate = new Date(bill.createdAt);
-      const now = new Date();
-      
-      if (dateFilter === "today") {
-        matchesDate = billDate.toDateString() === now.toDateString();
-      } else if (dateFilter === "week") {
-        const weekAgo = new Date();
-        weekAgo.setDate(now.getDate() - 7);
-        matchesDate = billDate >= weekAgo;
-      } else if (dateFilter === "month") {
-        const monthAgo = new Date();
-        monthAgo.setMonth(now.getMonth() - 1);
-        matchesDate = billDate >= monthAgo;
-      }
+      const matchesDate = matchesDateFilter(new Date(bill.createdAt));
 
       return matchesSearch && matchesStatus && matchesDate;
     });
   }, [bills, guests, searchTerm, statusFilter, dateFilter]);
 
   // Stats Calculation
+  const dateFilteredBills = bills.filter((b) => matchesDateFilter(new Date(b.createdAt)) && b.status !== "cancelled");
+
   const stats = {
-    total: bills.length,
-    pending: bills.filter((b) => b.status === "pending").length,
-    paid: bills.filter((b) => b.status === "paid").length,
-    totalRevenue: bills.filter((b) => b.status === "paid").reduce((sum, b) => sum + b.total, 0),
-    pendingAmount: bills.filter((b) => b.status === "pending").reduce((sum, b) => sum + b.total, 0),
-    totalTax: bills.filter((b) => b.status === "paid").reduce((sum, b) => sum + (b.tax || 0), 0),
-    cancelled: bills.filter((b) => b.status === "cancelled").length,
+    total: dateFilteredBills.length,
+    pending: dateFilteredBills.filter((b) => b.status === "pending").length,
+    paid: dateFilteredBills.filter((b) => b.status === "paid").length,
+    totalRevenue: dateFilteredBills.filter((b) => b.status === "paid").reduce((sum, b) => sum + b.total, 0),
+    pendingAmount: dateFilteredBills.filter((b) => b.status === "pending").reduce((sum, b) => sum + b.total, 0),
+    totalTax: dateFilteredBills.filter((b) => b.status === "paid").reduce((sum, b) => sum + (b.tax || 0), 0),
+    cancelled: dateFilteredBills.filter((b) => b.status === "cancelled").length,
   };
 
   const getGuestForBill = (guestId: string) => {
-     return guests.find((g) => g.id === guestId) || { id: guestId, name: 'Unknown', email: '', phone: '', bookingHistory: [] };
+    return guests.find((g) => g.id === guestId) || { id: guestId, name: 'Unknown', email: '', phone: '', bookingHistory: [] };
   }
 
   // --- 3. HANDLERS ---
@@ -164,7 +179,7 @@ export default function Billing() {
     try {
       if (billToEdit) {
         // Editing: replace the bill in the list
-        setBills((prev) => 
+        setBills((prev) =>
           prev.map((b) => b.id === billToEdit.id ? newBillData : b)
         );
         toast.success('Bill updated successfully!');
@@ -184,70 +199,70 @@ export default function Billing() {
   // B. Mark Paid
   const handleMarkPaid = async (billToUpdate: Bill) => {
     try {
-        const token = await user?.getIdToken();
-        
-        // Extract custom items and discounts from the bill to preserve them
-        const customItems = billToUpdate.items
-          .filter((item: any) => item.source === 'custom')
-          .map((item) => ({
-            description: item.description,
-            quantity: item.quantity,
-            qty: item.quantity,
-            rate: item.rate,
-            amount: item.amount,
-            category: item.category,
-            source: 'custom'
-          }));
-        
-        // Extract discount if exists
-        const discountItem = billToUpdate.items.find((item: any) => item.source === 'discount');
-        const discount = discountItem ? {
-          amount: Math.abs(discountItem.amount),
-          description: discountItem.description.replace('Discount: ', '').replace('Discount', '')
-        } : null;
-        
-        const res = await fetch(`${API_URL}/api/invoices/${billToUpdate.id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ 
-              status: 'paid',
-              customItems,
-              discountItem: discount
-            })
-        });
+      const token = await user?.getIdToken();
 
-        if (res.ok) {
-            const updatedInvoice = await res.json();
-            setBills((prev) =>
-              prev.map((b) =>
-                b.id === billToUpdate.id
-                  ? {
-                      ...b,
-                      status: "paid",
-                      paidAt: new Date(),
-                      items: updatedInvoice.lineItems.map((item: any) => ({
-                        description: item.description,
-                        quantity: item.qty || 1,
-                        rate: item.amount / (item.qty || 1),
-                        amount: item.amount,
-                        category: item.category || 'other',
-                        source: item.source
-                      })),
-                      subtotal: updatedInvoice.subtotal,
-                      tax: updatedInvoice.tax,
-                      total: updatedInvoice.total
-                    }
-                  : b
-              )
-            );
-            toast.success('Bill marked as paid');
-        }
+      // Extract custom items and discounts from the bill to preserve them
+      const customItems = billToUpdate.items
+        .filter((item: any) => item.source === 'custom')
+        .map((item) => ({
+          description: item.description,
+          quantity: item.quantity,
+          qty: item.quantity,
+          rate: item.rate,
+          amount: item.amount,
+          category: item.category,
+          source: 'custom'
+        }));
+
+      // Extract discount if exists
+      const discountItem = billToUpdate.items.find((item: any) => item.source === 'discount');
+      const discount = discountItem ? {
+        amount: Math.abs(discountItem.amount),
+        description: discountItem.description.replace('Discount: ', '').replace('Discount', '')
+      } : null;
+
+      const res = await fetch(`${API_URL}/api/invoices/${billToUpdate.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          status: 'paid',
+          customItems,
+          discountItem: discount
+        })
+      });
+
+      if (res.ok) {
+        const updatedInvoice = await res.json();
+        setBills((prev) =>
+          prev.map((b) =>
+            b.id === billToUpdate.id
+              ? {
+                ...b,
+                status: "paid",
+                paidAt: new Date(),
+                items: updatedInvoice.lineItems.map((item: any) => ({
+                  description: item.description,
+                  quantity: item.qty || 1,
+                  rate: item.amount / (item.qty || 1),
+                  amount: item.amount,
+                  category: item.category || 'other',
+                  source: item.source
+                })),
+                subtotal: updatedInvoice.subtotal,
+                tax: updatedInvoice.tax,
+                total: updatedInvoice.total
+              }
+              : b
+          )
+        );
+        toast.success('Bill marked as paid');
+      }
     } catch (err) {
-        console.error("Failed to mark as paid", err);
-        toast.error('Failed to mark bill as paid');
+      console.error("Failed to mark as paid", err);
+      toast.error('Failed to mark bill as paid');
     }
   };
 
@@ -258,24 +273,24 @@ export default function Billing() {
     }
 
     try {
-        const token = await user?.getIdToken();
-        const res = await fetch(`${API_URL}/api/invoices/${billToCancel.id}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
-
-        if (res.ok) {
-            setBills((prev) => prev.filter((b) => b.id !== billToCancel.id));
-            toast.success('Bill cancelled and deleted successfully');
-        } else {
-            const errorData = await res.json();
-            toast.error(errorData.error || 'Failed to cancel bill');
+      const token = await user?.getIdToken();
+      const res = await fetch(`${API_URL}/api/invoices/${billToCancel.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
+      });
+
+      if (res.ok) {
+        setBills((prev) => prev.filter((b) => b.id !== billToCancel.id));
+        toast.success('Bill cancelled and deleted successfully');
+      } else {
+        const errorData = await res.json();
+        toast.error(errorData.error || 'Failed to cancel bill');
+      }
     } catch (err) {
-        console.error("Failed to cancel bill", err);
-        toast.error('Failed to cancel bill');
+      console.error("Failed to cancel bill", err);
+      toast.error('Failed to cancel bill');
     }
   };
 
@@ -297,7 +312,7 @@ export default function Billing() {
         ];
       });
 
-      const csvContent = "data:text/csv;charset=utf-8," 
+      const csvContent = "data:text/csv;charset=utf-8,"
         + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
 
       const encodedUri = encodeURI(csvContent);
@@ -369,19 +384,19 @@ export default function Billing() {
   };
 
   if (isLoading) {
-      return (
-          <AdminReceptionistLayout role="receptionist">
-              <div className="flex h-screen items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-              </div>
-          </AdminReceptionistLayout>
-      );
+    return (
+      <AdminReceptionistLayout role="receptionist">
+        <div className="flex h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        </div>
+      </AdminReceptionistLayout>
+    );
   }
 
   return (
     <AdminReceptionistLayout role="receptionist">
       <div className="space-y-8 animate-fade-in print:p-0">
-        
+
         {/* Header (Hidden when printing report) */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8 print:hidden">
           <div>
@@ -415,7 +430,7 @@ export default function Billing() {
             <div className="text-3xl font-bold text-green-600 mb-1">${stats.totalRevenue.toLocaleString()}</div>
             <div className="text-sm text-green-700 font-medium">Revenue</div>
           </div>
-           <div className="border rounded-lg p-4 text-center shadow-sm bg-yellow-50 border-yellow-200">
+          <div className="border rounded-lg p-4 text-center shadow-sm bg-yellow-50 border-yellow-200">
             <div className="text-3xl font-bold text-yellow-600 mb-1">${stats.pendingAmount.toLocaleString()}</div>
             <div className="text-sm text-yellow-700 font-medium">Pending Amt</div>
           </div>
@@ -423,7 +438,7 @@ export default function Billing() {
 
         {/* Filters (Hidden in print report) */}
         <div className="print:hidden">
-            <BillFilters
+          <BillFilters
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
             statusFilter={statusFilter}
@@ -431,23 +446,24 @@ export default function Billing() {
             dateFilter={dateFilter}
             setDateFilter={setDateFilter}
             statusOptions={[
-                { value: "all", label: "All Status" },
-                { value: "pending", label: "Pending" },
-                { value: "paid", label: "Paid" },
-                { value: "cancelled", label: "Cancelled" },
+              { value: "all", label: "All Status" },
+              { value: "pending", label: "Pending" },
+              { value: "paid", label: "Paid" },
+              { value: "cancelled", label: "Cancelled" },
             ]}
             dateOptions={[
-                { value: "all", label: "All Time" },
-                { value: "today", label: "Today" },
-                { value: "week", label: "This week" },
-                { value: "month", label: "This month" },
+              { value: "all", label: "All Time" },
+              { value: "today", label: "Today" },
+              { value: "week", label: "This week" },
+              { value: "month", label: "This month" },
+              { value: "year", label: "This year" },
             ]}
             onClearFilters={() => {
-                setSearchTerm("");
-                setStatusFilter("all");
-                setDateFilter("all");
+              setSearchTerm("");
+              setStatusFilter("all");
+              setDateFilter("all");
             }}
-            />
+          />
         </div>
 
         {/* Create/View Modal */}
@@ -467,61 +483,61 @@ export default function Billing() {
 
         {/* Payment Summary Modal */}
         {showPaymentSummary && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 animate-fade-in relative">
-                    <button 
-                        onClick={() => setShowPaymentSummary(false)}
-                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-                    >
-                        <X className="h-5 w-5" />
-                    </button>
-                    <h2 className="text-xl font-bold text-gray-900 mb-4">Payment Summary</h2>
-                    
-                    <div className="space-y-4">
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-gray-600">Total Revenue Collected</span>
-                                <span className="text-xl font-bold text-green-600">${stats.totalRevenue.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-gray-600">Tax Collected</span>
-                                <span className="text-lg font-semibold text-gray-800">${stats.totalTax.toLocaleString()}</span>
-                            </div>
-                        </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-100/80 backdrop-blur-sm">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 animate-fade-in relative">
+              <button
+                onClick={() => setShowPaymentSummary(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Payment Summary</h2>
 
-                        <div className="p-4 bg-yellow-50 rounded-lg">
-                             <div className="flex justify-between items-center">
-                                <span className="text-gray-600">Outstanding (Pending)</span>
-                                <span className="text-xl font-bold text-yellow-600">${stats.pendingAmount.toLocaleString()}</span>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-4 text-center mt-4">
-                            <div className="p-2 bg-blue-50 rounded">
-                                <div className="text-xl font-bold text-blue-600">{stats.total}</div>
-                                <div className="text-xs text-gray-500">Total Bills</div>
-                            </div>
-                            <div className="p-2 bg-green-50 rounded">
-                                <div className="text-xl font-bold text-green-600">{stats.paid}</div>
-                                <div className="text-xs text-gray-500">Paid</div>
-                            </div>
-                            <div className="p-2 bg-red-50 rounded">
-                                <div className="text-xl font-bold text-red-600">{stats.cancelled}</div>
-                                <div className="text-xs text-gray-500">Cancelled</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="mt-6 flex justify-end">
-                        <button
-                            onClick={() => setShowPaymentSummary(false)}
-                            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200"
-                        >
-                            Close
-                        </button>
-                    </div>
+              <div className="space-y-4">
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-600">Total Revenue Collected</span>
+                    <span className="text-xl font-bold text-green-600">${stats.totalRevenue.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-600">Tax Collected</span>
+                    <span className="text-lg font-semibold text-gray-800">${stats.totalTax.toLocaleString()}</span>
+                  </div>
                 </div>
+
+                <div className="p-4 bg-yellow-50 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Outstanding (Pending)</span>
+                    <span className="text-xl font-bold text-yellow-600">${stats.pendingAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 text-center mt-4">
+                  <div className="p-2 bg-blue-50 rounded">
+                    <div className="text-xl font-bold text-blue-600">{stats.total}</div>
+                    <div className="text-xs text-gray-500">Total Bills</div>
+                  </div>
+                  <div className="p-2 bg-green-50 rounded">
+                    <div className="text-xl font-bold text-green-600">{stats.paid}</div>
+                    <div className="text-xs text-gray-500">Paid</div>
+                  </div>
+                  <div className="p-2 bg-red-50 rounded">
+                    <div className="text-xl font-bold text-red-600">{stats.cancelled}</div>
+                    <div className="text-xs text-gray-500">Cancelled</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowPaymentSummary(false)}
+                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200"
+                >
+                  Close
+                </button>
+              </div>
             </div>
+          </div>
         )}
 
         {/* Bills Grid */}
@@ -551,15 +567,15 @@ export default function Billing() {
             <h3 className="text-lg font-medium text-gray-900 mb-2">No bills found</h3>
           </div>
         )}
-        
+
         {/* Quick Actions (Hidden in print) */}
         <div className="print:hidden">
-            <QuickActions 
-                onCreateBillClick={() => { setBillToView(null); setBillToEdit(null); setShowBillForm(true); }}
-                onGenerateReport={handleGenerateReport}
-                onExportBills={handleExportBills}
-                onPaymentSummary={() => setShowPaymentSummary(true)}
-            />
+          <QuickActions
+            onCreateBillClick={() => { setBillToView(null); setBillToEdit(null); setShowBillForm(true); }}
+            onGenerateReport={handleGenerateReport}
+            onExportBills={handleExportBills}
+            onPaymentSummary={() => setShowPaymentSummary(true)}
+          />
         </div>
       </div>
     </AdminReceptionistLayout>
