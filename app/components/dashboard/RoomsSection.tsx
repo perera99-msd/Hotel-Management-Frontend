@@ -1,19 +1,14 @@
 /* */
-import React from "react";
-import { MoreVertical } from "lucide-react";
 
 const CustomRoomCard = ({ room }: { room: any }) => (
     <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-sm flex flex-col justify-between">
-        <div className="flex justify-between items-start">
-            <div>
-                {room.deals > 0 && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-green-100 text-green-700 mb-2 inline-block">
-                        {room.deals} Deals
-                    </span>
-                )}
-                <h3 className="text-lg font-semibold text-gray-800 mt-1 capitalize">{room.type}</h3>
-            </div>
-            <MoreVertical className="h-5 w-5 text-gray-400 cursor-pointer" />
+        <div>
+            {room.deals > 0 && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-green-100 text-green-700 mb-2 inline-block">
+                    {room.deals} Deals
+                </span>
+            )}
+            <h3 className="text-lg font-semibold text-gray-800 mt-1 capitalize">{room.type}</h3>
         </div>
 
         <div className="mt-3">

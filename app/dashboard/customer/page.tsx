@@ -129,6 +129,7 @@ export default function CustomerDashboard() {
   const [deals, setDeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [hotelInfo, setHotelInfo] = useState({ hotelName: "Grand Hotel", phone: "+94 11 234 5678" });
   const router = useRouter();
 
   const fetchBookings = useCallback(async () => {
@@ -190,13 +191,31 @@ export default function CustomerDashboard() {
     }
   }, [token]);
 
+  const fetchHotelInfo = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/settings`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setHotelInfo({
+        hotelName: data?.hotelName || "Grand Hotel",
+        phone: data?.phone || "+94 11 234 5678"
+      });
+    } catch (err) {
+      console.error("Failed to load hotel info", err);
+    }
+  }, [token]);
+
   useEffect(() => {
     // Only fetch when we have both token and profile
     if (token && profile) {
       fetchBookings();
       fetchDeals();
+      fetchHotelInfo();
     }
-  }, [token, profile, fetchBookings, fetchDeals]);
+  }, [token, profile, fetchBookings, fetchDeals, fetchHotelInfo]);
 
   // Calculate Real Stats from fetched data
   const completedStays = completedBookings.length;
@@ -204,6 +223,7 @@ export default function CustomerDashboard() {
   const upcomingStays = bookings.length;
 
   const handleCancelClick = (bookingId: string) => {
+    const receptionPhone = hotelInfo.phone;
     // UX: Display Reception Number instead of direct cancellation
     toast((t) => (
       <div className="flex flex-col gap-1">
@@ -211,9 +231,9 @@ export default function CustomerDashboard() {
         <span className="text-sm text-gray-600">
           Please call reception to cancel this booking:
         </span>
-        <a href="tel:+94112345678" className="flex items-center gap-2 text-blue-600 font-bold mt-1">
+        <a href={`tel:${receptionPhone.replace(/\s/g, "")}`} className="flex items-center gap-2 text-blue-600 font-bold mt-1">
           <Phone className="h-4 w-4" />
-          +94 11 234 5678
+          {receptionPhone}
         </a>
       </div>
     ), {
@@ -228,15 +248,16 @@ export default function CustomerDashboard() {
   };
 
   const handleReceptionContactClick = () => {
+    const receptionPhone = hotelInfo.phone;
     toast((t) => (
       <div className="flex flex-col gap-1">
         <span className="font-semibold text-gray-800">Call Receptionist</span>
         <span className="text-sm text-gray-600">
           For more details about the deal:
         </span>
-        <a href="tel:+94112345678" className="flex items-center gap-2 text-blue-600 font-bold mt-1">
+        <a href={`tel:${receptionPhone.replace(/\s/g, "")}`} className="flex items-center gap-2 text-blue-600 font-bold mt-1">
           <Phone className="h-4 w-4" />
-          +94 11 234 5678
+          {receptionPhone}
         </a>
       </div>
     ), {
@@ -570,7 +591,7 @@ export default function CustomerDashboard() {
               {/* Help Card */}
               <div className="bg-gradient-to-br from-gray-900 to-gray-800 text-white p-6 rounded-2xl shadow-lg">
                 <h4 className="font-bold text-lg mb-2">Need Help?</h4>
-                <p className="text-gray-300 text-sm mb-4">Contact our front desk 24/7 for assistance.</p>
+                <p className="text-gray-300 text-sm mb-4">Contact {hotelInfo.hotelName} front desk 24/7 for assistance.</p>
                 <button
                   onClick={handleReceptionContactClick}
                   className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-sm flex items-center justify-center gap-2"

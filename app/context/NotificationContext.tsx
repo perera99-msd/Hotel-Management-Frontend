@@ -180,12 +180,23 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
         }
     };
 
+    const getNotificationTimestamp = (createdAt: any) => {
+        if (!createdAt) return null;
+        if (typeof createdAt?.toDate === 'function') return createdAt.toDate().getTime();
+        if (typeof createdAt?.seconds === 'number') return createdAt.seconds * 1000;
+        if (createdAt instanceof Date) return createdAt.getTime();
+        const parsed = Date.parse(createdAt);
+        return Number.isNaN(parsed) ? null : parsed;
+    };
+
     const clearOldNotifications = async (days = 30) => {
         const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-        const toDelete = notifications.filter((n) => {
-            const ts = n.createdAt?.seconds ? n.createdAt.seconds * 1000 : Date.parse(n.createdAt);
-            return ts && ts < cutoff;
-        }).map((n) => n.id);
+        const toDelete = notifications
+            .filter((n) => {
+                const ts = getNotificationTimestamp(n.createdAt);
+                return ts !== null && ts < cutoff;
+            })
+            .map((n) => n.id);
 
         if (toDelete.length === 0) return;
 

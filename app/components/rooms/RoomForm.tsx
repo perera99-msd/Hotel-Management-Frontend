@@ -5,7 +5,7 @@ import { Save, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
-type RoomStatus = "available" | "occupied" | "reserved" | "cleaning" | "maintenance";
+type RoomStatus = "available" | "occupied" | "reserved" | "needs cleaning" | "maintenance" | "out of order";
 type RoomType = "single" | "double" | "suite" | "family";
 type RoomTier = "Deluxe" | "Normal";
 
@@ -91,7 +91,16 @@ export default function RoomForm({
       }
       const token = await user.getIdToken();
 
-      const backendStatus = newRoom.status.charAt(0).toUpperCase() + newRoom.status.slice(1);
+      // Convert frontend status to backend format
+      const statusMap: { [key: string]: string } = {
+        'available': 'Available',
+        'occupied': 'Occupied',
+        'reserved': 'Reserved',
+        'needs cleaning': 'Needs Cleaning',
+        'maintenance': 'Maintenance',
+        'out of order': 'Out of Order'
+      };
+      const backendStatus = statusMap[newRoom.status] || 'Available';
 
       const payload = {
         name: newRoom.name?.trim() || undefined,
@@ -219,8 +228,9 @@ export default function RoomForm({
             <option value="available">Available</option>
             <option value="occupied">Occupied</option>
             <option value="reserved">Reserved</option>
-            <option value="cleaning">Cleaning</option>
+            <option value="needs cleaning">Needs Cleaning</option>
             <option value="maintenance">Maintenance</option>
+            <option value="out of order">Out of Order</option>
           </select>
         </div>
 

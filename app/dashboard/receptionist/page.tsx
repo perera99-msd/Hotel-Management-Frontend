@@ -52,6 +52,7 @@ const Dashboard: React.FC = () => {
   const [roomStatusData, setRoomStatusData] = useState<any[]>([]);
   const [revenueData, setRevenueData] = useState<any[]>([]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [hotelName, setHotelName] = useState("Grand Hotel");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -62,17 +63,23 @@ const Dashboard: React.FC = () => {
         const headers = { 'Authorization': `Bearer ${token}` };
 
         // Fetch all data in parallel
-        const [dashboardRes, invoicesRes, ordersRes, inventoryRes] = await Promise.all([
+        const [dashboardRes, invoicesRes, ordersRes, inventoryRes, settingsRes] = await Promise.all([
           fetch(`${API_URL}/api/reports/dashboard`, { headers }),
           fetch(`${API_URL}/api/invoices`, { headers }),
           fetch(`${API_URL}/api/orders`, { headers }),
-          fetch(`${API_URL}/api/inventory`, { headers })
+          fetch(`${API_URL}/api/inventory`, { headers }),
+          fetch(`${API_URL}/api/settings`, { headers })
         ]);
 
         const dashboardData = await dashboardRes.json();
         const invoicesData = await invoicesRes.json();
         const ordersData = await ordersRes.json();
         const inventoryData = await inventoryRes.json();
+        const settingsData = settingsRes.ok ? await settingsRes.json() : null;
+
+        if (settingsData?.hotelName) {
+          setHotelName(settingsData.hotelName);
+        }
 
         if (dashboardRes.ok) {
           const { metrics, roomStatus, occupancyData: backendOccupancyData } = dashboardData;
@@ -196,7 +203,7 @@ const Dashboard: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl md:text-3xl font-semibold mb-1">
-                Welcome to Grand Hotel
+                Welcome to {hotelName}
               </h1>
               <p className="text-gray-200 text-sm md:text-base">
                 Here's what's happening today

@@ -1,27 +1,27 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import { auth } from "@/app/lib/firebase";
 import {
-  Bed,
-  Users,
-  Wifi,
-  Tv,
-  Wind,
-  Coffee,
-  MapPin,
-  CheckCircle,
-  Clock,
   AlertTriangle,
+  Bed,
+  CheckCircle,
+  ChevronDown,
+  Clock,
+  Coffee,
   Edit,
   Eye,
-  Trash2,
   LogIn,
   LogOut,
+  MapPin,
+  Trash2,
+  Tv,
   User,
-  ChevronDown,
+  Users,
+  Wifi,
+  Wind,
 } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { auth } from "@/app/lib/firebase";
 
 // --- Type Definitions ---
 export interface Room {
@@ -30,14 +30,11 @@ export interface Room {
   number: string;
   roomNumber?: string; // Added fallback
   type: "single" | "double" | "suite" | "family";
-  status: "available" | "occupied" | "reserved" | "cleaning" | "maintenance";
+  status: "available" | "occupied" | "reserved" | "needs cleaning" | "maintenance" | "out of order";
   rate: number;
   amenities: string[];
   maxOccupancy: number;
   floor: number;
-  needsCleaning?: boolean;
-  cleaningNotes?: string;
-  lastCleaned?: Date;
 }
 
 export interface Guest {
@@ -87,7 +84,7 @@ function RoomCard({
   guest,
   booking,
 }: RoomCardProps): React.ReactElement {
-  
+
   // Safe ID and Number extraction
   const roomId = room.id || room._id;
   const roomNum = room.number || room.roomNumber;
@@ -96,19 +93,19 @@ function RoomCard({
   // Helper to get token
   const getToken = async () => {
     const user = auth.currentUser;
-    if(!user) throw new Error("Not authenticated");
+    if (!user) throw new Error("Not authenticated");
     return await user.getIdToken();
   };
 
   // handleCheckIn Function
   const handleCheckIn = async (room: Room) => {
     if (onCheckIn) {
-        onCheckIn(room);
-        return;
+      onCheckIn(room);
+      return;
     }
     // Fallback internal logic
     try {
-      if(!booking) {
+      if (!booking) {
         toast.error("No booking found to check in.");
         return;
       }
@@ -125,7 +122,7 @@ function RoomCard({
 
       if (!response.ok) throw new Error(`API Error: ${response.status}`);
       toast.success("Guest Checked In");
-      window.location.reload(); 
+      window.location.reload();
 
     } catch (error) {
       console.error("Failed to check in:", error);
@@ -137,18 +134,18 @@ function RoomCard({
   // handleCheckOut Function
   const handleCheckOut = async (room: Room) => {
     if (onCheckOut) {
-        onCheckOut(room);
-        return;
+      onCheckOut(room);
+      return;
     }
     // Fallback internal logic
     try {
-      if(!booking) {
+      if (!booking) {
         handleStatusChange(roomId!, 'cleaning');
         return;
       }
       const token = await getToken();
       const endpoint = `${API_URL}/api/bookings/${booking.id}/checkout`;
-      
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -180,7 +177,7 @@ function RoomCard({
       const token = await getToken();
       const backendStatus = status.charAt(0).toUpperCase() + status.slice(1);
       const endpoint = `${API_URL}/api/rooms/${rId}/status`;
-      
+
       const response = await fetch(endpoint, {
         method: "PATCH",
         headers: {
@@ -205,8 +202,8 @@ function RoomCard({
   const handleDelete = async (room: Room) => {
     // ✅ FIX: Delegate to parent if available (Stops double delete)
     if (onDelete) {
-        onDelete(room);
-        return;
+      onDelete(room);
+      return;
     }
 
     // Only run this if NO parent handler is provided
@@ -215,7 +212,7 @@ function RoomCard({
     try {
       const token = await getToken();
       const endpoint = `${API_URL}/api/rooms/${roomId}`;
-      
+
       const response = await fetch(endpoint, {
         method: "DELETE",
         headers: {
@@ -236,9 +233,9 @@ function RoomCard({
 
   // handleView Function
   const handleView = async (room: Room) => {
-    if(onView) {
-        onView(room);
-        return;
+    if (onView) {
+      onView(room);
+      return;
     }
     toast.success("View action triggered");
   };
@@ -246,9 +243,9 @@ function RoomCard({
 
   // handleEdit Function
   const handleEdit = async (room: Room) => {
-    if(onEdit) {
-        onEdit(room);
-        return;
+    if (onEdit) {
+      onEdit(room);
+      return;
     }
     toast.success("Edit action triggered");
   };
@@ -372,8 +369,8 @@ function RoomCard({
                 <button
                   key={status}
                   onClick={() => {
-                     handleStatusChange(roomId!, status);
-                     setShowDropdown(false);
+                    handleStatusChange(roomId!, status);
+                    setShowDropdown(false);
                   }}
                   className="block w-full text-left px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 capitalize"
                 >

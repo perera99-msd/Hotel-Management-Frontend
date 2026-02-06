@@ -1,57 +1,52 @@
 /* */
 "use client";
 import { Calendar } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from 'recharts';
+import { useAuth } from "../../context/AuthContext";
 
 type TimeRange = 'monthly' | 'weekly' | 'yearly';
 
-// Mock data for different time ranges
-const monthlyData = [
-    { name: 'Jan', percentage: 65 },
-    { name: 'Feb', percentage: 78 },
-    { name: 'Mar', percentage: 85 },
-    { name: 'Apr', percentage: 72 },
-    { name: 'May', percentage: 88 },
-    { name: 'Jun', percentage: 92 },
-];
-
-const weeklyData = [
-    { name: 'Mon', percentage: 70 },
-    { name: 'Tue', percentage: 75 },
-    { name: 'Wed', percentage: 82 },
-    { name: 'Thu', percentage: 88 },
-    { name: 'Fri', percentage: 95 },
-    { name: 'Sat', percentage: 98 },
-    { name: 'Sun', percentage: 90 },
-];
-
-const yearlyData = [
-    { name: '2021', percentage: 68 },
-    { name: '2022', percentage: 75 },
-    { name: '2023', percentage: 82 },
-    { name: '2024', percentage: 88 },
-    { name: '2025', percentage: 92 },
-    { name: '2026', percentage: 85 },
-];
-
 export default function OccupancyStatisticsCard({ data }: { data?: any[] }) {
+    const { token } = useAuth();
     const [timeRange, setTimeRange] = useState<TimeRange>('monthly');
+    const [chartData, setChartData] = useState<any[]>(data || []);
+    const [loading, setLoading] = useState(false);
 
-    // Select data based on time range
-    const getChartData = () => {
-        switch (timeRange) {
-            case 'weekly':
-                return weeklyData;
-            case 'yearly':
-                return yearlyData;
-            case 'monthly':
-            default:
-                return data || monthlyData;
+    // Fetch occupancy data based on selected time range
+    const fetchOccupancyData = async (range: TimeRange) => {
+        if (!token) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/reports/occupancy?range=${range}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const result = await res.json();
+                setChartData(result.occupancyData || []);
+            }
+        } catch (error) {
+            console.error("Failed to fetch occupancy data", error);
+        } finally {
+            setLoading(false);
         }
     };
 
-    const chartData = getChartData();
+    // Fetch data when time range changes
+    useEffect(() => {
+        fetchOccupancyData(timeRange);
+    }, [timeRange, token]);
+
+    // Use initial data for monthly on first load
+    useEffect(() => {
+        if (data && data.length > 0 && timeRange === 'monthly') {
+            setChartData(data);
+        }
+    }, [data]);
+
+    const handleRangeChange = (range: TimeRange) => {
+        setTimeRange(range);
+    };
 
     return (
         <div className="bg-white p-5 border border-gray-200 rounded-lg shadow-sm h-full">
@@ -59,38 +54,46 @@ export default function OccupancyStatisticsCard({ data }: { data?: any[] }) {
                 <h2 className="text-lg font-semibold text-gray-800">Occupancy Statistics</h2>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => setTimeRange('weekly')}
+                        onClick={() => handleRangeChange('weekly')}
+                        disabled={loading}
                         className={`px-3 py-1 text-sm rounded-lg flex items-center gap-1 transition-colors ${timeRange === 'weekly'
-                                ? 'bg-blue-500 text-white'
-                                : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                            }`}
+                            ? 'bg-blue-500 text-white'
+                            : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                            } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                         <Calendar className="h-4 w-4" />
                         Weekly
                     </button>
                     <button
-                        onClick={() => setTimeRange('monthly')}
+                        onClick={() => handleRangeChange('monthly')}
+                        disabled={loading}
                         className={`px-3 py-1 text-sm rounded-lg flex items-center gap-1 transition-colors ${timeRange === 'monthly'
-                                ? 'bg-blue-500 text-white'
-                                : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                            }`}
+                            ? 'bg-blue-500 text-white'
+                            : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                            } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                         <Calendar className="h-4 w-4" />
                         Monthly
                     </button>
                     <button
-                        onClick={() => setTimeRange('yearly')}
+                        onClick={() => handleRangeChange('yearly')}
+                        disabled={loading}
                         className={`px-3 py-1 text-sm rounded-lg flex items-center gap-1 transition-colors ${timeRange === 'yearly'
-                                ? 'bg-blue-500 text-white'
-                                : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                            }`}
+                            ? 'bg-blue-500 text-white'
+                            : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                            } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                         <Calendar className="h-4 w-4" />
                         Yearly
                     </button>
                 </div>
             </div>
-            <div className="h-64">
+            <div className="h-64 relative">
+                {loading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    </div>
+                )}
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
                         <CartesianGrid horizontal={true} vertical={false} stroke="#E5E7EB" strokeDasharray="3 3" />

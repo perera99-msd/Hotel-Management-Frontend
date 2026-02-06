@@ -7,7 +7,7 @@ import { signOut } from "firebase/auth";
 import { Bell, Check, LogOut, Menu, Trash2, X } from "lucide-react"; // Added X and Check icons
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react"; // Added for dropdown state
+import { useEffect, useState } from "react"; // Added for dropdown state
 
 interface HeaderProps {
   dashboardType?: "customer" | "admin" | "receptionist";
@@ -20,7 +20,8 @@ export default function Header({
 }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, user } = useAuth();
+  const { profile, user, token } = useAuth();
+  const [hotelName, setHotelName] = useState("Grand Hotel");
 
   // --- Notification Logic Start ---
   const { notifications, unreadCount, markAsRead, deleteNotification, clearOldNotifications } = useNotifications();
@@ -57,6 +58,22 @@ export default function Header({
   const title = titleMap[pathname] || "Hotel Management";
 
   const displayName = profile?.name || user?.displayName || "User";
+  useEffect(() => {
+    const fetchSettings = async () => {
+      if (dashboardType !== "customer" || !token) return;
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"}/api/settings`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.hotelName) setHotelName(data.hotelName);
+      } catch (e) {
+        console.error("Failed to load settings", e);
+      }
+    };
+    fetchSettings();
+  }, [dashboardType, token]);
   const initials = displayName
     .split(" ")
     .map((n) => n[0])
@@ -94,7 +111,7 @@ export default function Header({
                   <span className="text-white font-bold text-sm">HM</span>
                 </div>
                 <span className="text-xl font-bold text-white">
-                  Grand Hotel
+                  {hotelName}
                 </span>
               </div>
               {/* Mobile Hotel Name */}
@@ -104,7 +121,7 @@ export default function Header({
                     <span className="text-white font-bold text-xs">HM</span>
                   </div>
                   <div>
-                    <span className="text-sm font-bold text-white block leading-tight">Grand Hotel</span>
+                    <span className="text-sm font-bold text-white block leading-tight">{hotelName}</span>
                     <span className="text-[10px] text-white/80 leading-tight">Luxury Experience</span>
                   </div>
                 </div>

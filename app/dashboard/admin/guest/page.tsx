@@ -5,7 +5,6 @@ import { MoreVertical, RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import GuestDetailsModal from "../../../components/guest/GuestDetailsModal";
 import GuestModel from "../../../components/guest/guestmodel";
-import GuestModelUpdate from "../../../components/guest/guestmodelupdate";
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 import { useAuth } from "../../../context/AuthContext";
 // ✅ Make sure to run: npm install dayjs
@@ -14,7 +13,11 @@ import dayjs from "dayjs";
 interface Reservation {
     id: string;
     mongoId: string;
+    guestId?: string;
     name: string;
+    guestEmail?: string;
+    guestPhone?: string;
+    guestIdNumber?: string;
     roomNumber: string;
     checkIn: string;
     checkOut: string;
@@ -35,7 +38,6 @@ export default function Page() {
     const itemsPerPage = 10;
     const [openMenu, setOpenMenu] = useState<number | null>(null);
     const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
-    const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [selectedGuest, setSelectedGuest] = useState<any | null>(null);
     const [guestDetails, setGuestDetails] = useState<any | null>(null);
@@ -103,7 +105,11 @@ export default function Page() {
                         id: `#${b._id.slice(-4).toUpperCase()}`, // Short ID for display
                         mongoId: b._id, // Real ID for actions
                         name: b.guestId?.name || 'Unknown Guest',
-                        roomNumber: b.roomId?.number || 'N/A',
+                        guestId: typeof b.guestId === 'object' && b.guestId !== null ? b.guestId._id : b.guestId,
+                        guestEmail: typeof b.guestId === 'object' && b.guestId !== null ? b.guestId.email : undefined,
+                        guestPhone: typeof b.guestId === 'object' && b.guestId !== null ? b.guestId.phone : undefined,
+                        guestIdNumber: typeof b.guestId === 'object' && b.guestId !== null ? b.guestId.idNumber : undefined,
+                        roomNumber: b.roomId?.roomNumber || b.roomId?.number || 'N/A',
                         checkIn: b.checkIn,
                         checkOut: b.checkOut,
                         roomType: b.roomId?.type || 'Standard',
@@ -220,58 +226,23 @@ export default function Page() {
         setIsGuestModalOpen(true);
     };
 
-    const handleViewGuestDetails = async (mongoId: string) => {
-        try {
-            if (!token) return;
-            // Fetch the complete booking information with guest details
-            const bookingRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/bookings/${mongoId}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (bookingRes.ok) {
-                const booking = await bookingRes.json();
-                const guest = booking.guestId || {};
-
-                setGuestDetails({
-                    _id: guest._id,
-                    name: guest.name || 'Unknown',
-                    email: guest.email || 'N/A',
-                    phone: guest.phone || 'N/A',
-                    idNumber: guest.idNumber || 'N/A',
-                    checkIn: booking.checkIn,
-                    checkOut: booking.checkOut,
-                    roomNumber: booking.roomId?.roomNumber || 'N/A',
-                    roomType: booking.roomId?.type || 'N/A',
-                    totalAmount: booking.roomTotal || 0,
-                    status: booking.status
-                });
-                setIsDetailsModalOpen(true);
-            }
-        } catch (error) {
-            console.error("Failed to fetch guest details:", error);
-        }
-    };
-
-    const handleUpdateGuest = (reservation: Reservation) => {
-        const checkIn = dayjs(reservation.checkIn);
-        const checkOut = dayjs(reservation.checkOut);
-        const nights = checkOut.diff(checkIn, 'day');
-
-        setSelectedGuest({
-            mongoId: reservation.mongoId, // Important for API call
-            name: reservation.name,
-            registrationNumber: reservation.id,
-            roomNumber: reservation.roomNumber,
-            checkInDate: checkIn.format('YYYY-MM-DD'),
-            roomType: reservation.roomType,
-            stay: `${nights} Nights`,
-            discount: reservation.discount,
-            totalAmount: reservation.totalAmount,
-            amountPaid: reservation.amountPaid,
+    const handleViewGuestDetails = (reservation: Reservation) => {
+        setGuestDetails({
+            _id: reservation.guestId,
+            name: reservation.name || 'Unknown',
+            email: reservation.guestEmail || 'N/A',
+            phone: reservation.guestPhone || 'N/A',
+            idNumber: reservation.guestIdNumber || 'N/A',
+            checkIn: reservation.checkIn,
+            checkOut: reservation.checkOut,
+            roomNumber: reservation.roomNumber || 'N/A',
+            roomType: reservation.roomType || 'N/A',
+            totalAmount: reservation.totalAmount || 0,
             status: reservation.status
         });
-        setIsUpdateModalOpen(true);
+        setIsDetailsModalOpen(true);
     };
+
 
     return (
         <AdminReceptionistLayout role="admin">
@@ -349,9 +320,8 @@ export default function Page() {
                                     />
                                     {openMenu === index && (
                                         <div className="absolute right-0 top-8 w-44 bg-white shadow-2xl rounded-lg border border-gray-200 z-50">
-                                            <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100 border-b" onClick={() => { handleViewGuestDetails(reservation.mongoId); setOpenMenu(null); }}>View Details</button>
-                                            <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100 border-b" onClick={() => { handleViewGuest(reservation); setOpenMenu(null); }}>View Booking</button>
-                                            <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => { handleUpdateGuest(reservation); setOpenMenu(null); }}>Update</button>
+                                            <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100 border-b" onClick={() => { handleViewGuest(reservation); setOpenMenu(null); }}>Booking Details</button>
+                                            <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100 border-b" onClick={() => { handleViewGuestDetails(reservation); setOpenMenu(null); }}>Guest Details</button>
                                             <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100" onClick={() => handleDelete(reservation.mongoId)}>Delete</button>
                                         </div>
                                     )}
@@ -364,14 +334,6 @@ export default function Page() {
 
             <GuestModel isOpen={isGuestModalOpen} onClose={() => setIsGuestModalOpen(false)} guestData={selectedGuest} />
             <GuestDetailsModal isOpen={isDetailsModalOpen} onClose={() => setIsDetailsModalOpen(false)} guestData={guestDetails} />
-            <GuestModelUpdate
-                isOpen={isUpdateModalOpen}
-                onClose={() => setIsUpdateModalOpen(false)}
-                guestData={selectedGuest}
-                onUpdate={(updated) => {
-                    fetchReservations(); // Refresh list after update
-                }}
-            />
         </AdminReceptionistLayout>
     );
 }
