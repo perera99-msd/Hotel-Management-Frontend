@@ -15,7 +15,13 @@ interface Deal {
   reservationsLeft: number;
   startDate?: string;
   endDate: string;
-  roomType: string;
+  dealType?: 'room' | 'food' | 'trip';
+  discountType?: 'percentage' | 'bogo';
+  roomType?: string;
+  roomTypeRaw?: string[];
+  roomIds?: string[];
+  menuItemIds?: string[];
+  tripPackageIds?: string[];
   status: 'Ongoing' | 'Full' | 'Inactive' | 'New' | 'Finished';
   image?: string; // ✅ Added image field
   description?: string;
@@ -223,9 +229,20 @@ export default function Page() {
                   </div>
 
                   <div className="text-sm text-gray-700 space-y-1">
-                    <p><span className="font-medium">Room Type:</span> {deal.roomType}</p>
+                    <p><span className="font-medium">Type:</span> {(deal.dealType || 'room').toUpperCase()}</p>
+                    {deal.dealType === 'room' && (
+                      <p><span className="font-medium">Room Type:</span> {deal.roomType || '—'}</p>
+                    )}
+                    {deal.dealType === 'food' && (
+                      <p><span className="font-medium">Menu Items:</span> {deal.menuItemIds?.length || 0}</p>
+                    )}
+                    {deal.dealType === 'trip' && (
+                      <p><span className="font-medium">Trip Packages:</span> {deal.tripPackageIds?.length || 0}</p>
+                    )}
                     <p><span className="font-medium">Reservations Left:</span> {deal.reservationsLeft}</p>
-                    {typeof deal.discount === 'number' && (
+                    {deal.discountType === 'bogo' ? (
+                      <p><span className="font-medium">Discount:</span> BOGO</p>
+                    ) : typeof deal.discount === 'number' && (
                       <p><span className="font-medium">Discount:</span> {deal.discount}%</p>
                     )}
                   </div>

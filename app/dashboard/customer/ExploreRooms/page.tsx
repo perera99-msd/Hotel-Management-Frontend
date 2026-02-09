@@ -37,6 +37,8 @@ interface Room {
   images?: string[];
   applicableRate?: number;
   bookingMonth?: number;
+  dealImage?: string;
+  dealName?: string;
 }
 
 // --- Helper Components ---
@@ -63,7 +65,9 @@ const CustomerRoomCard = ({
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
 
-  const images = room.images && room.images.length > 0 ? room.images : [];
+  const images = room.dealImage
+    ? [room.dealImage, ...(room.images || [])]
+    : room.images && room.images.length > 0 ? room.images : [];
   const hasMultipleImages = images.length > 1;
 
   const nextImage = (e: React.MouseEvent) => {
@@ -234,6 +238,7 @@ const CustomerRoomCard = ({
 export default function ExploreRoomsPage() {
   const { token } = useContext(AuthContext);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [roomDeals, setRoomDeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<any | null>(null);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -275,7 +280,30 @@ export default function ExploreRoomsPage() {
 
         if (response.ok) {
           const data = await response.json();
-          setRooms(data);
+
+          const mappedRooms = data.map((room: Room) => {
+            const exactDeals = roomDeals.filter((deal: any) =>
+              Array.isArray(deal.roomIds) && deal.roomIds.includes(room._id)
+            );
+            const hasExact = exactDeals.length > 0;
+            const typeDeals = hasExact
+              ? []
+              : roomDeals.filter((deal: any) =>
+                (!Array.isArray(deal.roomIds) || deal.roomIds.length === 0) &&
+                Array.isArray(deal.roomTypeRaw) &&
+                deal.roomTypeRaw.some((t: string) => t.toLowerCase() === room.type.toLowerCase())
+              );
+            const matchingDeals = (hasExact ? exactDeals : typeDeals).filter((deal: any) => !!deal.image);
+            const bestDeal = matchingDeals.sort((a: any, b: any) => (b.discount || 0) - (a.discount || 0))[0];
+
+            return {
+              ...room,
+              dealImage: bestDeal?.image,
+              dealName: bestDeal?.dealName
+            };
+          });
+
+          setRooms(mappedRooms);
         } else {
           console.error("Failed to fetch rooms");
         }
@@ -287,7 +315,40 @@ export default function ExploreRoomsPage() {
     };
 
     fetchRooms();
-  }, [token, checkIn, checkOut, roomType]);
+  }, [token, checkIn, checkOut, roomType, roomDeals]);
+
+  useEffect(() => {
+    const fetchDeals = async () => {
+      if (!token) return;
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+        const res = await fetch(`${API_URL}/api/deals`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          }
+        });
+
+        if (!res.ok) return;
+        const data = await res.json();
+        const today = new Date();
+        const activeRoomDeals = data.filter((deal: any) => {
+          if (deal.dealType !== 'room') return false;
+          const statusOk = ['Ongoing', 'New', 'Inactive', 'Full'].includes(deal.status);
+          if (!statusOk) return false;
+          const start = new Date(deal.startDate);
+          const end = new Date(deal.endDate);
+          if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return true;
+          return start <= today && end >= today;
+        });
+        setRoomDeals(activeRoomDeals);
+      } catch (error) {
+        console.error("Failed to load room deals", error);
+      }
+    };
+
+    fetchDeals();
+  }, [token]);
 
   const handleBookNow = (room: Room) => {
     // Map data for the modal

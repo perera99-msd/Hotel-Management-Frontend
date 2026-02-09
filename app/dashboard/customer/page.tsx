@@ -180,10 +180,16 @@ export default function CustomerDashboard() {
       const data = await res.json();
       const today = new Date();
       const active = data.filter((d: any) => {
+        const statusOk = ['Ongoing', 'New', 'Inactive', 'Full'].includes(d.status);
+        if (!statusOk) return false;
+
         const start = new Date(d.startDate);
         const end = new Date(d.endDate);
-        const statusOk = ['Ongoing', 'New', 'Inactive', 'Full'].includes(d.status);
-        return statusOk && start <= today && end >= today;
+        const startValid = !Number.isNaN(start.getTime());
+        const endValid = !Number.isNaN(end.getTime());
+
+        if (!startValid || !endValid) return true;
+        return start <= today && end >= today;
       });
       setDeals(active);
     } catch (err) {

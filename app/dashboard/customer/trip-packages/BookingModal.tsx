@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useContext } from "react";
-import Image from "next/image";
 import { AuthContext } from "@/app/context/AuthContext";
+import Image from "next/image";
+import { useContext, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
 interface Package {
@@ -47,6 +47,7 @@ export default function BookingModal({
     });
     const [loading, setLoading] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState(false);
+    const [tripDeals, setTripDeals] = useState<any[]>([]);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -79,6 +80,33 @@ export default function BookingModal({
     }, [token, isOpen, API_URL]);
 
     useEffect(() => {
+        const fetchDeals = async () => {
+            if (!token || !isOpen) return;
+            try {
+                const res = await fetch(`${API_URL}/api/deals`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                const today = new Date();
+                const activeTripDeals = data.filter((deal: any) => {
+                    if (deal.dealType !== 'trip') return false;
+                    const statusOk = ['Ongoing', 'New', 'Inactive', 'Full'].includes(deal.status);
+                    if (!statusOk) return false;
+                    const start = new Date(deal.startDate);
+                    const end = new Date(deal.endDate);
+                    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return true;
+                    return start <= today && end >= today;
+                });
+                setTripDeals(activeTripDeals);
+            } catch (err) {
+                console.error("Failed to load trip deals", err);
+            }
+        };
+        fetchDeals();
+    }, [token, isOpen, API_URL]);
+
+    useEffect(() => {
         const firstEligible = bookings.find((b) => {
             const status = (b.status || '').toLowerCase();
             return status === 'confirmed' || status === 'checkedin' || status === 'checked-in';
@@ -88,9 +116,23 @@ export default function BookingModal({
     }, [bookings]);
 
     const serviceFee = 12.0;
-    const discount = 0;
     const subtotal = packageItem.price * guests;
-    const total = subtotal + serviceFee - discount;
+    const selectedDate = tripDate ? new Date(tripDate) : new Date();
+    const applicableTripDeals = tripDeals.filter((deal: any) =>
+        Array.isArray(deal.tripPackageIds) &&
+        deal.tripPackageIds.includes(packageItem.id)
+    );
+    const bestTripDeal = applicableTripDeals.reduce((best: any, deal: any) => {
+        const start = new Date(deal.startDate);
+        const end = new Date(deal.endDate);
+        const inWindow = Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) ? true : (start <= selectedDate && end >= selectedDate);
+        if (!inWindow) return best;
+        if (!best || (deal.discount || 0) > (best.discount || 0)) return deal;
+        return best;
+    }, null as any);
+    const discountPercent = Number(bestTripDeal?.discount || 0);
+    const discountAmount = subtotal * (discountPercent / 100);
+    const total = Math.max(0, subtotal - discountAmount + serviceFee);
 
     const eligibleBookings = bookings.filter((b) => {
         const status = (b.status || '').toLowerCase();
@@ -150,19 +192,19 @@ export default function BookingModal({
             };
 
             const response = await fetch(`${API_URL}/api/trips/requests`, {
-              method: "POST",
-              headers: { 
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${token}` 
-              },
-              body: JSON.stringify(bookingData),
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify(bookingData),
             });
-      
+
             if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(errorData.error || "Failed to save booking");
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Failed to save booking");
             }
-      
+
             setShowConfirmation(true);
         } catch (error: any) {
             console.error("Error creating booking:", error);
@@ -203,7 +245,18 @@ export default function BookingModal({
                                 <h3 className="text-lg font-semibold">{packageItem.name}</h3>
                                 <p className="text-sm text-gray-500">{packageItem.location}</p>
                             </div>
-                            <p className="text-lg font-semibold text-[#199FDA]">${packageItem.price}</p>
+                            <div className="text-right">
+                                {discountPercent > 0 ? (
+                                    <>
+                                        <p className="text-xs text-gray-400 line-through">${packageItem.price}</p>
+                                        <p className="text-lg font-semibold text-[#199FDA]">
+                                            ${(packageItem.price * (1 - discountPercent / 100)).toFixed(2)}
+                                        </p>
+                                    </>
+                                ) : (
+                                    <p className="text-lg font-semibold text-[#199FDA]">${packageItem.price}</p>
+                                )}
+                            </div>
                         </div>
 
                         {/* Image */}
@@ -339,6 +392,12 @@ export default function BookingModal({
                                 <span>Sub Total:</span>
                                 <span>${subtotal.toFixed(2)}</span>
                             </div>
+                            {discountPercent > 0 && (
+                                <div className="flex justify-between text-emerald-700">
+                                    <span>Deal Discount ({discountPercent}%):</span>
+                                    <span>- ${discountAmount.toFixed(2)}</span>
+                                </div>
+                            )}
                             <div className="flex justify-between">
                                 <span>Service Fee:</span>
                                 <span>${serviceFee.toFixed(2)}</span>
