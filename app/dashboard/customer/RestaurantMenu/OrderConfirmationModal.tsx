@@ -1,10 +1,10 @@
 // app/dashboard/customer/RestaurantMenu/OrderConfirmationModal.tsx
 "use client";
 
-import { useState, useContext, useEffect } from "react";
-import { SelectedMenuItem } from "./OrderSelectionModal";
 import { AuthContext } from "@/app/context/AuthContext";
+import { useContext, useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { SelectedMenuItem } from "./OrderSelectionModal";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -39,7 +39,7 @@ export default function OrderConfirmationModal({
                     if (res.ok) {
                         const bookings = await res.json();
                         // Find a booking that is actively checked in
-                        const active = bookings.find((b: any) => 
+                        const active = bookings.find((b: any) =>
                             b.status === 'CheckedIn' || b.status === 'Checked-In'
                         );
                         if (active) {
@@ -61,12 +61,26 @@ export default function OrderConfirmationModal({
 
     if (!isOpen) return null;
 
+    const getItemDealSavings = (menuItem: SelectedMenuItem["menuItem"], quantity: number) => {
+        const deal = menuItem.activeDeal;
+        if (!deal) return 0;
+        if ((deal.discountType || "percentage") === "bogo") {
+            const freeItems = Math.floor(quantity / 2);
+            return freeItems * menuItem.price;
+        }
+        const pct = Number(deal.discount || 0);
+        return menuItem.price * quantity * (pct / 100);
+    };
+
     // Calculate totals
     const subtotal = selectedItems.reduce((sum, item) =>
         sum + (item.menuItem.price * item.quantity), 0
     );
-    const serviceFee = subtotal * 0.1;
-    const total = subtotal + serviceFee;
+    const dealDiscount = selectedItems.reduce((sum, item) =>
+        sum + getItemDealSavings(item.menuItem, item.quantity), 0
+    );
+    const discountedSubtotal = Math.max(0, subtotal - dealDiscount);
+    const total = discountedSubtotal;
 
     const handlePlaceOrder = async () => {
         if (!token) {
@@ -95,19 +109,19 @@ export default function OrderConfirmationModal({
             };
 
             const response = await fetch(`${API_URL}/api/orders`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(orderData),
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(orderData),
             });
-      
+
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Failed to place order');
             }
-      
+
             // Show success modal
             setShowSuccess(true);
 
@@ -153,7 +167,16 @@ export default function OrderConfirmationModal({
                             {selectedItems.map(({ menuItem, quantity }) => (
                                 <div key={menuItem._id} className="border-b border-gray-200 pb-6 last:border-b-0">
                                     <div className="flex justify-between items-start mb-2">
-                                        <h3 className="text-lg font-semibold text-gray-900">{menuItem.name}</h3>
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-gray-900">{menuItem.name}</h3>
+                                            {menuItem.activeDeal && (
+                                                <div className="text-xs text-purple-700 font-medium mt-1">
+                                                    {menuItem.activeDeal.dealName || "Deal"} · {menuItem.activeDeal.discountType === "bogo"
+                                                        ? "BOGO (Buy 1 Get 1)"
+                                                        : `${Number(menuItem.activeDeal.discount || 0)}% OFF`}
+                                                </div>
+                                            )}
+                                        </div>
                                         <div className="text-right">
                                             <div className="text-lg font-bold text-gray-900">${(menuItem.price * quantity).toFixed(2)}</div>
                                             <span className="text-sm text-gray-600 capitalize">{menuItem.category}</span>
@@ -178,11 +201,25 @@ export default function OrderConfirmationModal({
                                     )}
 
                                     <div className="flex justify-between items-center">
-                                        <span className="text-sm text-gray-600">Quantity: {quantity}</span>
+                                        <span className="text-sm text-gray-600">
+                                            Quantity: {quantity}
+                                            {menuItem.activeDeal?.discountType === "bogo" && (
+                                                <span className="ml-2 text-purple-700">
+                                                    {quantity >= 2
+                                                        ? `Free items: ${Math.floor(quantity / 2)}`
+                                                        : "Add 1 more to get 1 free"}
+                                                </span>
+                                            )}
+                                        </span>
                                         <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full">
                                             {menuItem.available ? "Available" : "Pre-order"}
                                         </span>
                                     </div>
+                                    {menuItem.activeDeal && getItemDealSavings(menuItem, quantity) > 0 && (
+                                        <div className="mt-2 text-xs text-green-700 font-medium">
+                                            You save ${getItemDealSavings(menuItem, quantity).toFixed(2)} on this item
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -193,10 +230,12 @@ export default function OrderConfirmationModal({
                                 <span className="text-gray-600">Sub Total:</span>
                                 <span className="font-medium text-gray-900">${subtotal.toFixed(2)}</span>
                             </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-gray-600">Service Fee (10%):</span>
-                                <span className="font-medium text-gray-900">${serviceFee.toFixed(2)}</span>
-                            </div>
+                            {dealDiscount > 0 && (
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Deal Discount:</span>
+                                    <span className="font-medium text-green-700">-${dealDiscount.toFixed(2)}</span>
+                                </div>
+                            )}
                             <div className="border-t border-gray-200 pt-3">
                                 <div className="flex justify-between font-bold text-lg">
                                     <span className="text-gray-900">Total:</span>

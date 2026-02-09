@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 
 // Define the menu item interface
@@ -24,13 +24,6 @@ interface OrderItem {
     quantity: number;
 }
 
-// Define Guest interface
-interface Guest {
-    _id: string;
-    name: string;
-    email: string;
-}
-
 interface BookingSummary {
     _id: string;
     roomId: any;
@@ -40,21 +33,13 @@ interface BookingSummary {
 
 export default function ManualOrderView() {
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-    const [guests, setGuests] = useState<Guest[]>([]); // Store guests for the dropdown
     const [bookings, setBookings] = useState<BookingSummary[]>([]);
     const [selectedBookingId, setSelectedBookingId] = useState<string>("");
+    const [foodDeals, setFoodDeals] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const { token } = useAuth();
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-
-    // Form state
-    const [formData, setFormData] = useState({
-        guestName: "",
-        roomNumber: "",
-        tableNumber: "",
-        specialNotes: ""
-    });
 
     // Selected items state
     const [selectedItems, setSelectedItems] = useState<OrderItem[]>([]);
@@ -65,15 +50,15 @@ export default function ManualOrderView() {
             setLoading(true);
             const headers = { 'Authorization': `Bearer ${token}` };
 
-            // Fetch Menu Items and Users (Guests) in parallel
-            const [menuRes, userRes, bookingRes] = await Promise.all([
+            // Fetch Menu Items and Bookings in parallel
+            const [menuRes, bookingRes, dealsRes] = await Promise.all([
                 fetch(`${API_URL}/api/menu`, { headers }),
-                fetch(`${API_URL}/api/users`, { headers }),
-                fetch(`${API_URL}/api/bookings`, { headers })
+                fetch(`${API_URL}/api/bookings`, { headers }),
+                fetch(`${API_URL}/api/deals`, { headers })
             ]);
 
             if (!menuRes.ok) throw new Error("Failed to fetch menu items");
-            
+
             const menuData = await menuRes.json();
             // Map _id to id
             const formattedMenu = menuData.map((item: any) => ({
@@ -82,17 +67,25 @@ export default function ManualOrderView() {
             }));
             setMenuItems(formattedMenu);
 
-            // Load guests if available
-            if (userRes.ok) {
-                const usersData = await userRes.json();
-                // Filter users to show only customers if needed, or show all
-                setGuests(usersData);
-            }
-
             if (bookingRes.ok) {
                 const bookingData = await bookingRes.json();
                 const checkedIn = bookingData.filter((b: any) => b.status === 'CheckedIn' || b.status === 'Checked-In');
                 setBookings(checkedIn);
+            }
+
+            if (dealsRes.ok) {
+                const dealsData = await dealsRes.json();
+                const today = new Date();
+                const activeFoodDeals = (Array.isArray(dealsData) ? dealsData : []).filter((deal: any) => {
+                    if (deal.dealType !== 'food') return false;
+                    const statusOk = ['Ongoing', 'New', 'Inactive', 'Full'].includes(deal.status);
+                    if (!statusOk) return false;
+                    const start = new Date(deal.startDate);
+                    const end = new Date(deal.endDate);
+                    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return true;
+                    return start <= today && end >= today;
+                });
+                setFoodDeals(activeFoodDeals);
             }
 
         } catch (err) {
@@ -116,16 +109,10 @@ export default function ManualOrderView() {
         }
     }, [bookings, selectedBookingId]);
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name]: value
-        }));
-    };
-
     const handleAddItem = (menuItem: MenuItem) => {
         if (!menuItem.available) return;
+        const deal = getBestDealForItem(menuItem.id);
+        const step = deal?.discountType === 'bogo' ? 2 : 1;
 
         setSelectedItems(prev => {
             const existingItem = prev.find(item => item.menuItemId === menuItem.id);
@@ -134,7 +121,7 @@ export default function ManualOrderView() {
                 // Increase quantity if item already exists
                 return prev.map(item =>
                     item.menuItemId === menuItem.id
-                        ? { ...item, quantity: item.quantity + 1 }
+                        ? { ...item, quantity: item.quantity + step }
                         : item
                 );
             } else {
@@ -145,7 +132,7 @@ export default function ManualOrderView() {
                         menuItemId: menuItem.id,
                         name: menuItem.name,
                         price: menuItem.price,
-                        quantity: 1
+                        quantity: step
                     }
                 ];
             }
@@ -153,14 +140,17 @@ export default function ManualOrderView() {
     };
 
     const handleRemoveItem = (menuItemId: string) => {
+        const deal = getBestDealForItem(menuItemId);
+        const step = deal?.discountType === 'bogo' ? 2 : 1;
+
         setSelectedItems(prev => {
             const existingItem = prev.find(item => item.menuItemId === menuItemId);
 
-            if (existingItem && existingItem.quantity > 1) {
+            if (existingItem && existingItem.quantity > step) {
                 // Decrease quantity
                 return prev.map(item =>
                     item.menuItemId === menuItemId
-                        ? { ...item, quantity: item.quantity - 1 }
+                        ? { ...item, quantity: item.quantity - step }
                         : item
                 );
             } else {
@@ -175,16 +165,76 @@ export default function ManualOrderView() {
         return item ? item.quantity : 0;
     };
 
-    const calculateTotal = () => {
+    const calculateSubtotal = () => {
         return selectedItems.reduce((total, item) => total + (item.price * item.quantity), 0);
     };
 
-    const handleCreateOrder = async () => {
-        if (!formData.guestName.trim()) {
-            alert("Please enter guest name");
-            return;
-        }
+    const calculateDealDiscount = () => {
+        if (selectedItems.length === 0 || foodDeals.length === 0) return 0;
+        let discount = 0;
 
+        selectedItems.forEach((item) => {
+            const matchingDeals = foodDeals.filter((deal: any) =>
+                Array.isArray(deal.menuItemIds) && deal.menuItemIds.includes(item.menuItemId)
+            );
+
+            if (matchingDeals.length === 0) return;
+
+            let bestSavings = 0;
+            matchingDeals.forEach((deal: any) => {
+                let savings = 0;
+                if ((deal.discountType || 'percentage') === 'bogo') {
+                    const freeItems = Math.floor(item.quantity / 2);
+                    savings = freeItems * item.price;
+                } else {
+                    const pct = Number(deal.discount || 0);
+                    savings = item.price * item.quantity * (pct / 100);
+                }
+                if (savings > bestSavings) bestSavings = savings;
+            });
+
+            discount += bestSavings;
+        });
+
+        return discount;
+    };
+
+    const getItemDealSavings = (item: OrderItem) => {
+        if (!foodDeals.length) return 0;
+        const matchingDeals = foodDeals.filter((deal: any) =>
+            Array.isArray(deal.menuItemIds) && deal.menuItemIds.includes(item.menuItemId)
+        );
+        if (matchingDeals.length === 0) return 0;
+
+        let bestSavings = 0;
+        matchingDeals.forEach((deal: any) => {
+            let savings = 0;
+            if ((deal.discountType || 'percentage') === 'bogo') {
+                const freeItems = Math.floor(item.quantity / 2);
+                savings = freeItems * item.price;
+            } else {
+                const pct = Number(deal.discount || 0);
+                savings = item.price * item.quantity * (pct / 100);
+            }
+            if (savings > bestSavings) bestSavings = savings;
+        });
+
+        return bestSavings;
+    };
+
+    const getBestDealForItem = (menuItemId: string) => {
+        if (!foodDeals.length) return null;
+        const matchingDeals = foodDeals.filter((deal: any) =>
+            Array.isArray(deal.menuItemIds) && deal.menuItemIds.includes(menuItemId)
+        );
+        if (matchingDeals.length === 0) return null;
+        return matchingDeals.reduce((best: any, deal: any) => {
+            if (!best || (deal.discount || 0) > (best.discount || 0)) return deal;
+            return best;
+        }, null as any);
+    };
+
+    const handleCreateOrder = async () => {
         if (!selectedBookingId) {
             alert("Select a checked-in booking before creating an order.");
             return;
@@ -196,21 +246,12 @@ export default function ManualOrderView() {
         }
 
         try {
-            // Attempt to find a matching guest ID if the name matches exactly
-            const matchedGuest = guests.find(g => g.name.toLowerCase() === formData.guestName.toLowerCase());
-
             const orderData = {
                 bookingId: selectedBookingId,
-                guestId: matchedGuest?._id, // Send ID if found
-                guestName: formData.guestName,
-                roomNumber: formData.roomNumber || undefined,
-                tableNumber: formData.tableNumber || undefined,
-                specialNotes: formData.specialNotes || undefined,
                 items: selectedItems.map(item => ({
                     menuItemId: item.menuItemId,
                     quantity: item.quantity
-                })),
-                totalAmount: calculateTotal()
+                }))
             };
 
             const response = await fetch(`${API_URL}/api/orders`, {
@@ -223,12 +264,6 @@ export default function ManualOrderView() {
             });
 
             if (response.ok) {
-                setFormData({
-                    guestName: "",
-                    roomNumber: "",
-                    tableNumber: "",
-                    specialNotes: ""
-                });
                 setSelectedItems([]);
                 alert("Order created successfully!");
             } else {
@@ -308,69 +343,6 @@ export default function ManualOrderView() {
                             )}
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Guest Name *</label>
-                            <input
-                                type="text"
-                                name="guestName"
-                                list="guest-list" // Connects to the datalist below
-                                value={formData.guestName}
-                                onChange={handleInputChange}
-                                className="w-full border rounded px-3 py-2 text-black"
-                                placeholder="Enter or select guest name"
-                                autoComplete="off"
-                            />
-                            {/* Hidden Datalist to display customers without changing UI structure */}
-                            <datalist id="guest-list">
-                                {guests.map((guest) => (
-                                    <option key={guest._id} value={guest.name}>
-                                        {guest.email}
-                                    </option>
-                                ))}
-                            </datalist>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Room Number</label>
-                            <select
-                                name="roomNumber"
-                                value={formData.roomNumber}
-                                onChange={handleInputChange}
-                                className="w-full border rounded px-3 py-2 text-black"
-                            >
-                                <option value="">Select room (optional)</option>
-                                {/* In a real app, these rooms would also be fetched from API */}
-                                <option value="101">Room 101</option>
-                                <option value="102">Room 102</option>
-                                <option value="103">Room 103</option>
-                                <option value="201">Room 201</option>
-                                <option value="202">Room 202</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Table Number</label>
-                            <input
-                                type="text"
-                                name="tableNumber"
-                                value={formData.tableNumber}
-                                onChange={handleInputChange}
-                                className="w-full border rounded px-3 py-2 text-black"
-                                placeholder="Enter table number (optional)"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Special Notes</label>
-                            <textarea
-                                name="specialNotes"
-                                value={formData.specialNotes}
-                                onChange={handleInputChange}
-                                className="w-full border rounded px-3 py-2 text-black"
-                                rows={3}
-                                placeholder="Any special instructions..."
-                            />
-                        </div>
                     </div>
 
                     {/* Selected Items Summary */}
@@ -385,7 +357,7 @@ export default function ManualOrderView() {
                                             <span className="text-sm text-gray-600 ml-2">x{item.quantity}</span>
                                         </div>
                                         <div className="flex items-center space-x-2">
-                                            <span>${(item.price * item.quantity).toFixed(2)}</span>
+                                            <span>${(item.price * item.quantity - getItemDealSavings(item)).toFixed(2)}</span>
                                             <button
                                                 onClick={() => handleRemoveItem(item.menuItemId)}
                                                 className="text-red-600 hover:text-red-800 text-sm"
@@ -397,9 +369,19 @@ export default function ManualOrderView() {
                                 ))}
                             </div>
                             <div className="border-t mt-3 pt-3">
-                                <div className="flex justify-between font-semibold">
+                                <div className="flex justify-between text-sm">
+                                    <span>Subtotal:</span>
+                                    <span>${calculateSubtotal().toFixed(2)}</span>
+                                </div>
+                                {calculateDealDiscount() > 0 && (
+                                    <div className="flex justify-between text-sm text-emerald-700">
+                                        <span>Deal Discount:</span>
+                                        <span>- ${calculateDealDiscount().toFixed(2)}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between font-semibold mt-2">
                                     <span>Total:</span>
-                                    <span>${calculateTotal().toFixed(2)}</span>
+                                    <span>${Math.max(0, calculateSubtotal() - calculateDealDiscount()).toFixed(2)}</span>
                                 </div>
                             </div>
                         </div>
@@ -418,6 +400,7 @@ export default function ManualOrderView() {
                         <div className="space-y-4 max-h-[500px] overflow-y-auto">
                             {availableMenuItems.map((menuItem) => {
                                 const quantity = getItemQuantity(menuItem.id);
+                                const activeDeal = getBestDealForItem(menuItem.id);
                                 return (
                                     <div key={menuItem.id} className="border rounded-lg p-4">
                                         <div className="flex justify-between items-center">
@@ -425,6 +408,16 @@ export default function ManualOrderView() {
                                                 <div className="font-semibold">{menuItem.name}</div>
                                                 <div className="text-sm text-gray-600 capitalize">{menuItem.category}</div>
                                                 <div className="text-lg font-semibold text-gray-700 mt-1">${menuItem.price}</div>
+                                                {activeDeal && (
+                                                    <div className="mt-1 inline-flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                                                        <span className="rounded-full bg-emerald-50 px-2 py-0.5">
+                                                            {activeDeal.discountType === 'bogo'
+                                                                ? 'BOGO Deal'
+                                                                : `${activeDeal.discount || 0}% OFF`}
+                                                        </span>
+                                                        <span className="text-gray-500">{activeDeal.dealName}</span>
+                                                    </div>
+                                                )}
                                                 {quantity > 0 && (
                                                     <div className="text-sm text-blue-600 mt-1">
                                                         Added: {quantity}

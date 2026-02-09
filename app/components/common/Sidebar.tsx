@@ -108,6 +108,7 @@ export default function Sidebar({
       { name: "Dashboard", href: "/dashboard/receptionist", icon: LayoutDashboard, badge: null },
       { name: "Front Desk", href: "/dashboard/receptionist/frontdesk", icon: UserCheck, badge: null },
       { name: "Bookings", href: "/dashboard/receptionist/bookings", icon: Calendar, badge: null },
+      { name: "Deals", href: "/dashboard/receptionist/deals", icon: Tags, badge: null },
       { name: "Trip Packages", href: "/dashboard/receptionist/trip-packages", icon: Navigation, badge: null },
       { name: "Billing", href: "/dashboard/receptionist/billing", icon: FileText, badge: null },
       { name: "Dining", href: "/dashboard/receptionist/dining", icon: Utensils, badge: null },

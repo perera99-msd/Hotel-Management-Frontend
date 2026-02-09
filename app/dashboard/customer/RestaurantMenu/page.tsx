@@ -13,7 +13,17 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export default function RestaurantMenuPage() {
   const { token } = useContext(AuthContext);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [menuItems, setMenuItems] = useState<(MenuItem & {
+    dealImage?: string;
+    dealName?: string;
+    activeDeal?: {
+      id: string;
+      dealName?: string;
+      discountType?: "percentage" | "bogo";
+      discount?: number;
+    };
+  })[]>([]);
+  const [foodDeals, setFoodDeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
@@ -40,7 +50,39 @@ export default function RestaurantMenuPage() {
       }
 
       const data = await response.json();
-      setMenuItems(data);
+      const mappedItems = data.map((item: MenuItem) => {
+        const matchingDeals = foodDeals.filter((deal: any) =>
+          Array.isArray(deal.menuItemIds) && deal.menuItemIds.includes(item._id)
+        );
+
+        let bestDeal: any = null;
+        let bestSavings = 0;
+        matchingDeals.forEach((deal: any) => {
+          const discountType = deal.discountType || "percentage";
+          const savings = discountType === "bogo"
+            ? item.price
+            : item.price * (Number(deal.discount || 0) / 100);
+          if (savings > bestSavings) {
+            bestSavings = savings;
+            bestDeal = deal;
+          }
+        });
+
+        return {
+          ...item,
+          dealImage: bestDeal?.image,
+          dealName: bestDeal?.dealName,
+          activeDeal: bestDeal
+            ? {
+              id: bestDeal._id,
+              dealName: bestDeal.dealName,
+              discountType: bestDeal.discountType || "percentage",
+              discount: bestDeal.discount || 0
+            }
+            : undefined
+        };
+      });
+      setMenuItems(mappedItems);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load menu");
@@ -53,6 +95,37 @@ export default function RestaurantMenuPage() {
 
   useEffect(() => {
     fetchMenuItems();
+  }, [token, foodDeals]);
+
+  useEffect(() => {
+    const fetchDeals = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_URL}/api/deals`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const today = new Date();
+        const activeFoodDeals = data.filter((deal: any) => {
+          if (deal.dealType !== 'food') return false;
+          const statusOk = ['Ongoing', 'New', 'Inactive', 'Full'].includes(deal.status);
+          if (!statusOk) return false;
+          const start = new Date(deal.startDate);
+          const end = new Date(deal.endDate);
+          if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return true;
+          return start <= today && end >= today;
+        });
+        setFoodDeals(activeFoodDeals);
+      } catch (err) {
+        console.error("Failed to load food deals", err);
+      }
+    };
+
+    fetchDeals();
   }, [token]);
 
   // Get unique categories for filter
@@ -76,9 +149,10 @@ export default function RestaurantMenuPage() {
 
   // Handle individual item order
   const handleIndividualOrder = (menuItem: MenuItem) => {
+    const step = menuItem.activeDeal?.discountType === "bogo" ? 2 : 1;
     const selectedItem: SelectedMenuItem = {
       menuItem: menuItem,
-      quantity: 1
+      quantity: step
     };
     setSelectedOrderItems([selectedItem]);
     setIsConfirmationModalOpen(true);
@@ -175,8 +249,8 @@ export default function RestaurantMenuPage() {
                 key={category}
                 onClick={() => setSelectedCategory(category)}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${selectedCategory === category
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                   }`}
               >
                 {category}
@@ -199,10 +273,10 @@ export default function RestaurantMenuPage() {
                 className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-4 hover:shadow-lg transition-all"
               >
                 {/* Image */}
-                {item.image && (
+                {(item.dealImage || item.image) && (
                   <div className="mb-3">
                     <img
-                      src={item.image}
+                      src={item.dealImage || item.image}
                       alt={item.name}
                       className="w-full h-48 object-cover rounded-lg"
                     />
@@ -248,8 +322,8 @@ export default function RestaurantMenuPage() {
                 <div className="flex justify-between items-center">
                   <span
                     className={`text-xs font-medium px-2 py-1 rounded-full ${item.available
-                        ? "bg-green-100 text-green-800"
-                        : "bg-red-100 text-red-800"
+                      ? "bg-green-100 text-green-800"
+                      : "bg-red-100 text-red-800"
                       }`}
                   >
                     {item.available ? "Available" : "Unavailable"}
@@ -260,8 +334,8 @@ export default function RestaurantMenuPage() {
                     onClick={() => handleIndividualOrder(item)}
                     disabled={!item.available}
                     className={`py-2 px-4 rounded-md font-medium text-sm transition-colors ${item.available
-                        ? "bg-blue-600 hover:bg-blue-700 text-white"
-                        : "bg-gray-100 text-gray-500 cursor-not-allowed"
+                      ? "bg-blue-600 hover:bg-blue-700 text-white"
+                      : "bg-gray-100 text-gray-500 cursor-not-allowed"
                       }`}
                   >
                     Order

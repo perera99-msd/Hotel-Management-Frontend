@@ -21,6 +21,7 @@ export default function AddTripBookingModal({
   const [packages, setPackages] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [searchGuest, setSearchGuest] = useState("");
+  const [tripDeals, setTripDeals] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
     guestId: "",
@@ -80,6 +81,28 @@ export default function AddTripBookingModal({
       } catch (e) {
         console.error("Failed to load packages", e);
         toast.error("Load packages failed");
+      }
+
+      try {
+        const dealsRes = await fetchWithTimeout(`${API_URL}/api/deals`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (dealsRes.ok) {
+          const data = await dealsRes.json();
+          const today = new Date();
+          const activeTripDeals = (Array.isArray(data) ? data : []).filter((deal: any) => {
+            if (deal.dealType !== 'trip') return false;
+            const statusOk = ['Ongoing', 'New', 'Inactive', 'Full'].includes(deal.status);
+            if (!statusOk) return false;
+            const start = new Date(deal.startDate);
+            const end = new Date(deal.endDate);
+            if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return true;
+            return start <= today && end >= today;
+          });
+          setTripDeals(activeTripDeals);
+        }
+      } catch (e) {
+        console.error("Failed to load trip deals", e);
       }
 
       try {
@@ -191,6 +214,24 @@ export default function AddTripBookingModal({
 
   const selectedBooking = eligibleBookings.find(b => b._id === formData.bookingId);
   const bookingCheckedIn = selectedBooking ? ['checkedin', 'checked-in'].includes((selectedBooking.status || '').toLowerCase()) : false;
+  const selectedPackage = packages.find((pkg) => pkg._id === formData.packageId);
+
+  const selectedDate = formData.tripDate ? new Date(formData.tripDate) : new Date();
+  const applicableDeals = tripDeals.filter((deal: any) =>
+    Array.isArray(deal.tripPackageIds) && deal.tripPackageIds.includes(formData.packageId)
+  );
+  const bestDeal = applicableDeals.reduce((best: any, deal: any) => {
+    const start = new Date(deal.startDate);
+    const end = new Date(deal.endDate);
+    const inWindow = Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) ? true : (start <= selectedDate && end >= selectedDate);
+    if (!inWindow) return best;
+    if (!best || (deal.discount || 0) > (best.discount || 0)) return deal;
+    return best;
+  }, null as any);
+  const discountPercent = Number(bestDeal?.discount || 0);
+  const subtotal = selectedPackage?.price ? selectedPackage.price * (formData.participants || 1) : 0;
+  const discountAmount = subtotal * (discountPercent / 100);
+  const total = Math.max(0, subtotal - discountAmount);
 
   useEffect(() => {
     // Auto-select first eligible booking for the chosen guest
@@ -299,6 +340,25 @@ export default function AddTripBookingModal({
               ))}
             </div>
           </div>
+
+          {selectedPackage && (
+            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span>Subtotal:</span>
+                <span>${subtotal.toFixed(2)}</span>
+              </div>
+              {discountPercent > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>Deal Discount ({discountPercent}%):</span>
+                  <span>- ${discountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold">
+                <span>Total:</span>
+                <span>${total.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
 
           {/* 3. Details */}
           <div className="grid grid-cols-2 gap-4">

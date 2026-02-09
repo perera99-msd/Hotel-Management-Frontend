@@ -20,11 +20,14 @@ interface Package {
     location: string;
     image?: string;
     images?: string[];
+    dealImage?: string;
+    dealName?: string;
 }
 
 export default function CustomerTripPackages() {
     const { token } = useContext(AuthContext);
     const [packages, setPackages] = useState<Package[]>([]);
+    const [tripDeals, setTripDeals] = useState<any[]>([]);
     const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [isCustomTripModalOpen, setIsCustomTripModalOpen] = useState(false);
@@ -34,7 +37,7 @@ export default function CustomerTripPackages() {
 
     useEffect(() => {
         fetchPackages();
-    }, [token]);
+    }, [token, tripDeals]);
 
     const fetchPackages = async () => {
         if (!token) return;
@@ -52,7 +55,20 @@ export default function CustomerTripPackages() {
                         ...p,
                         id: p._id || p.id,
                     }));
-                setPackages(mappedPackages);
+                const packagesWithDeals = mappedPackages.map((pkg: Package) => {
+                    const matchingDeals = tripDeals.filter((deal: any) =>
+                        Array.isArray(deal.tripPackageIds) && deal.tripPackageIds.includes(pkg._id || pkg.id)
+                    ).filter((deal: any) => !!deal.image);
+
+                    const bestDeal = matchingDeals.sort((a: any, b: any) => (b.discount || 0) - (a.discount || 0))[0];
+
+                    return {
+                        ...pkg,
+                        dealImage: bestDeal?.image,
+                        dealName: bestDeal?.dealName
+                    };
+                });
+                setPackages(packagesWithDeals);
             }
         } catch (error) {
             console.error("Error fetching packages:", error);
@@ -61,6 +77,34 @@ export default function CustomerTripPackages() {
         }
     };
 
+    useEffect(() => {
+        const fetchDeals = async () => {
+            if (!token) return;
+            try {
+                const res = await fetch(`${API_URL}/api/deals`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                const today = new Date();
+                const activeTripDeals = data.filter((deal: any) => {
+                    if (deal.dealType !== 'trip') return false;
+                    const statusOk = ['Ongoing', 'New', 'Inactive', 'Full'].includes(deal.status);
+                    if (!statusOk) return false;
+                    const start = new Date(deal.startDate);
+                    const end = new Date(deal.endDate);
+                    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return true;
+                    return start <= today && end >= today;
+                });
+                setTripDeals(activeTripDeals);
+            } catch (error) {
+                console.error("Error fetching trip deals:", error);
+            }
+        };
+
+        fetchDeals();
+    }, [token]);
+
     const handleBookClick = (pkg: Package) => {
         setSelectedPackage(pkg);
         setIsBookingModalOpen(true);
@@ -68,6 +112,9 @@ export default function CustomerTripPackages() {
 
     // Helper to get image from backend, with fallback to placeholder
     const getPackageImage = (pkg: Package) => {
+        if (pkg.dealImage) {
+            return pkg.dealImage;
+        }
         // First priority: images array from backend
         if (pkg.images && pkg.images.length > 0) {
             return pkg.images[0];

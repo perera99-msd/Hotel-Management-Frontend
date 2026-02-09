@@ -14,6 +14,12 @@ export interface MenuItem {
     discount?: number;
     available: boolean;
     image?: string;
+    activeDeal?: {
+        id: string;
+        dealName?: string;
+        discountType?: "percentage" | "bogo";
+        discount?: number;
+    };
 }
 
 interface OrderSelectionModalProps {
@@ -53,24 +59,31 @@ export default function OrderSelectionModal({
             item.category.toLowerCase() === selectedCategory.toLowerCase()
         );
 
+    const getStepForItem = (item: MenuItem) =>
+        item.activeDeal?.discountType === "bogo" ? 2 : 1;
+
     const toggleItemSelection = (item: MenuItem) => {
         setSelectedItems(prev => {
             const existingItem = prev.find(selected => selected.menuItem._id === item._id);
             if (existingItem) {
                 return prev.filter(selected => selected.menuItem._id !== item._id);
             } else {
-                return [...prev, { menuItem: item, quantity: 1 }];
+                return [...prev, { menuItem: item, quantity: getStepForItem(item) }];
             }
         });
     };
 
-    const updateQuantity = (itemId: string, newQuantity: number) => {
-        if (newQuantity < 1) return;
+    const updateQuantity = (item: MenuItem, newQuantity: number) => {
+        const step = getStepForItem(item);
+        if (newQuantity < step) return;
+        const normalizedQuantity = item.activeDeal?.discountType === "bogo"
+            ? newQuantity + (newQuantity % 2)
+            : newQuantity;
 
         setSelectedItems(prev =>
             prev.map(selected =>
-                selected.menuItem._id === itemId
-                    ? { ...selected, quantity: newQuantity }
+                selected.menuItem._id === item._id
+                    ? { ...selected, quantity: normalizedQuantity }
                     : selected
             )
         );
@@ -136,6 +149,12 @@ export default function OrderSelectionModal({
                             {filteredItems.map((item) => {
                                 const isSelected = selectedItems.some(selected => selected.menuItem._id === item._id);
                                 const selectedItem = selectedItems.find(selected => selected.menuItem._id === item._id);
+                                const deal = item.activeDeal;
+                                const dealLabel = deal
+                                    ? (deal.discountType === "bogo"
+                                        ? "BOGO"
+                                        : `${Number(deal.discount || 0)}% OFF`)
+                                    : null;
 
                                 return (
                                     <div
@@ -146,7 +165,14 @@ export default function OrderSelectionModal({
                                     >
                                         <div className="flex justify-between items-start mb-2">
                                             <div className="flex-1">
-                                                <h3 className="text-lg font-semibold text-gray-900">{item.name}</h3>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="text-lg font-semibold text-gray-900">{item.name}</h3>
+                                                    {dealLabel && (
+                                                        <span className="text-[10px] uppercase tracking-wide bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">
+                                                            {dealLabel}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <span className="text-sm text-gray-600 capitalize">{item.category}</span>
                                             </div>
                                             <div className="text-right">
@@ -177,17 +203,23 @@ export default function OrderSelectionModal({
                                                 {item.available ? "Available" : "Unavailable"}
                                             </span>
 
+                                            {deal?.dealName && (
+                                                <span className="text-xs text-purple-700 font-medium">
+                                                    {deal.dealName}
+                                                </span>
+                                            )}
+
                                             {isSelected && (
                                                 <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
                                                     <button
-                                                        onClick={() => updateQuantity(item._id, (selectedItem?.quantity || 1) - 1)}
+                                                        onClick={() => updateQuantity(item, (selectedItem?.quantity || 1) - getStepForItem(item))}
                                                         className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 text-black font-bold"
                                                     >
                                                         -
                                                     </button>
                                                     <span className="text-sm font-medium text-black">{selectedItem?.quantity || 1}</span>
                                                     <button
-                                                        onClick={() => updateQuantity(item._id, (selectedItem?.quantity || 1) + 1)}
+                                                        onClick={() => updateQuantity(item, (selectedItem?.quantity || 1) + getStepForItem(item))}
                                                         className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 text-black font-bold"
                                                     >
                                                         +
@@ -212,7 +244,16 @@ export default function OrderSelectionModal({
                                 {selectedItems.map(({ menuItem, quantity }) => (
                                     <div key={menuItem._id} className="bg-white rounded-lg p-3 border border-gray-200">
                                         <div className="flex justify-between items-start mb-2">
-                                            <h4 className="font-medium text-gray-900">{menuItem.name}</h4>
+                                            <div>
+                                                <h4 className="font-medium text-gray-900">{menuItem.name}</h4>
+                                                {menuItem.activeDeal && (
+                                                    <div className="text-xs text-purple-700 font-medium mt-0.5">
+                                                        {menuItem.activeDeal.dealName || "Deal"} · {menuItem.activeDeal.discountType === "bogo"
+                                                            ? "BOGO"
+                                                            : `${Number(menuItem.activeDeal.discount || 0)}% OFF`}
+                                                    </div>
+                                                )}
+                                            </div>
                                             <span className="text-gray-900 font-medium">${menuItem.price * quantity}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-sm text-gray-600">
