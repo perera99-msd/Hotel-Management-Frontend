@@ -475,6 +475,9 @@ export default function DealModel({ isOpen, onClose, onSave }: DealModelProps) {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               placeholder="Image URL for the deal"
             />
+            <p className="mt-2 text-xs text-gray-500">
+              Recommended: a wide banner image (JPG/PNG/WebP), 1600×600px (≈ 8:3) for the customer dashboard hero slider.
+            </p>
           </div>
 
           {/* Action Buttons */}
