@@ -1,8 +1,9 @@
-import { LucideIcon, Plus, FileText, CreditCard, Download } from "lucide-react";
+import { CreditCard, Download, FileText, LucideIcon, Plus } from "lucide-react";
 
 interface Action {
   label: string;
   icon: LucideIcon;
+  description: string;
   variant?: "primary" | "secondary" | "warning" | "success";
   onClick?: () => void;
 }
@@ -14,7 +15,7 @@ interface QuickActionsProps {
   onPaymentSummary: () => void;
 }
 
-export default function QuickActions({ 
+export default function QuickActions({
   onCreateBillClick,
   onGenerateReport,
   onExportBills,
@@ -23,24 +24,28 @@ export default function QuickActions({
   const actions: Action[] = [
     {
       label: "Create Bill",
+      description: "Start a new invoice for a guest.",
       icon: Plus,
       variant: "primary",
       onClick: onCreateBillClick,
     },
     {
       label: "Generate Report",
+      description: "Open a printable billing report.",
       icon: FileText,
       variant: "secondary",
       onClick: onGenerateReport, // ✅ Wired up
     },
     {
       label: "Export Bills",
+      description: "Download bills as a CSV file.",
       icon: Download,
       variant: "success",
       onClick: onExportBills, // ✅ Wired up
     },
     {
       label: "Payment Summary",
+      description: "View totals and payment stats.",
       icon: CreditCard,
       variant: "warning",
       onClick: onPaymentSummary, // ✅ Wired up
@@ -73,11 +78,14 @@ export default function QuickActions({
               onClick={action.onClick}
               className={`${getButtonClasses(
                 action.variant
-              )} flex flex-col items-center justify-center w-full h-24 rounded-lg transition-colors`}
+              )} flex flex-col items-center justify-center w-full h-28 rounded-lg transition-colors px-3`}
             >
               <Icon className="h-6 w-6 mb-2" />
               <span className="text-sm font-medium text-center">
                 {action.label}
+              </span>
+              <span className="mt-1 text-[11px] text-gray-600 text-center leading-tight">
+                {action.description}
               </span>
             </button>
           );

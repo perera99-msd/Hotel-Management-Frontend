@@ -1,7 +1,8 @@
 "use client";
 
-import { Calendar, ChevronLeft, ChevronRight, Filter, Search, User, X } from "lucide-react";
+import { Calendar, ChevronLeft, ChevronRight, Filter, Plus, Search, User, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import NewBookingModal from "../../../components/bookings/NewBookingModal";
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 import { useAuth } from "../../../context/AuthContext";
 
@@ -63,12 +64,14 @@ const normalizeDate = (date: Date) => new Date(date.getFullYear(), date.getMonth
 export default function FrontDeskPage() {
     const { token } = useAuth();
     const scrollableRef = useRef<HTMLDivElement>(null);
+    const monthInputRef = useRef<HTMLInputElement>(null);
     const [activeTab, setActiveTab] = useState<StatusFilter>("all");
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
     const [rooms, setRooms] = useState<RoomRow[]>([]);
     const [bookings, setBookings] = useState<BookingRow[]>([]);
     const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
+    const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
 
     const monthStart = useMemo(
         () => new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1),
@@ -157,6 +160,12 @@ export default function FrontDeskPage() {
         fetchRooms();
         fetchBookings();
     }, [token]);
+
+    const handleBookingCreated = () => {
+        fetchRooms();
+        fetchBookings();
+        setIsNewBookingOpen(false);
+    };
 
     const getBookingStatusForDay = (booking: BookingRow, date: Date) => {
         if (booking.status === "CheckedOut") return "checked-out";
@@ -260,17 +269,37 @@ export default function FrontDeskPage() {
                             </div>
                             <div className="relative">
                                 <input
+                                    ref={monthInputRef}
                                     type="month"
                                     value={monthInputValue}
                                     min={formatMonthValue(minMonth)}
                                     max={formatMonthValue(maxMonth)}
                                     onChange={(e) => setSelectedMonth(parseMonthValue(e.target.value))}
-                                    className="w-10 h-9 opacity-0 absolute inset-0 cursor-pointer z-10"
+                                    className="w-10 h-9 opacity-0 absolute inset-0 pointer-events-none"
                                 />
-                                <div className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition shadow-sm cursor-pointer">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (monthInputRef.current?.showPicker) {
+                                            monthInputRef.current.showPicker();
+                                        } else {
+                                            monthInputRef.current?.focus();
+                                            monthInputRef.current?.click();
+                                        }
+                                    }}
+                                    aria-label="Select month"
+                                    className="p-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition shadow-sm"
+                                >
                                     <Calendar className="h-4 w-4 text-gray-600" />
-                                </div>
+                                </button>
                             </div>
+                            <button
+                                onClick={() => setIsNewBookingOpen(true)}
+                                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition"
+                            >
+                                <Plus className="h-4 w-4" />
+                                New Booking
+                            </button>
                         </div>
                     </div>
 
@@ -425,6 +454,13 @@ export default function FrontDeskPage() {
                         </div>
                     </div>
                 </div>
+
+                <NewBookingModal
+                    isOpen={isNewBookingOpen}
+                    onClose={() => setIsNewBookingOpen(false)}
+                    editingBooking={null}
+                    onUpdateBooking={handleBookingCreated}
+                />
 
                 {/* Booking Details Modal */}
                 {selectedBooking && (
