@@ -2,7 +2,7 @@
 "use client";
 
 import { auth } from "@/app/lib/firebase";
-import { onAuthStateChanged, User } from "firebase/auth";
+import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { usePathname, useRouter } from "next/navigation";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 
@@ -65,16 +65,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const data: UserProfile = await res.json();
         setProfile(data);
         setRole(data.roles?.[0] || 'customer');
-      } else {
-        // Even on error, set a default role so loading can complete
-        setProfile(null);
-        setRole('customer');
+        return;
       }
+
+      // If the backend rejects the token or profile is unavailable, force re-login.
+      await signOut(auth);
     } catch (error) {
       console.error("Failed to connect to backend", error);
-      // Even on error, set a default role so loading can complete
-      setProfile(null);
-      setRole('customer');
+      await signOut(auth);
     }
   }, [API_URL]);
 

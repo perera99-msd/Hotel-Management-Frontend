@@ -1,19 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { auth } from "@/app/lib/firebase";
+import { Clock, Package } from "lucide-react";
+import { useEffect, useState } from "react";
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
-import TripPackagesView from "../../../components/trip-packages/TripPackagesView";
-import BookingsView from "../../../components/trip-packages/BookingsView";
 import AddPackageModal from "../../../components/trip-packages/AddPackageModal";
 import AddTripBookingModal from "../../../components/trip-packages/AddTripBookingModal";
-import { Package, Clock } from "lucide-react";
-import { auth } from "@/app/lib/firebase";
+import BookingsView from "../../../components/trip-packages/BookingsView";
+import TripPackagesView from "../../../components/trip-packages/TripPackagesView";
 
 export default function TripPackages() {
   const [activeTab, setActiveTab] = useState<"packages" | "bookings">("packages");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
-  
+
   // Real Counts
   const [pkgCount, setPkgCount] = useState(0);
   const [bookingCount, setBookingCount] = useState(0);
@@ -22,22 +22,28 @@ export default function TripPackages() {
 
   const fetchCounts = async () => {
     try {
-        const token = await auth.currentUser?.getIdToken();
-        if(!token) return;
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
 
-        // Fetch Packages Count
-        const pkgRes = await fetch(`${API_URL}/api/trips`, { headers: { Authorization: `Bearer ${token}` }});
-        if(pkgRes.ok) {
-            const data = await pkgRes.json();
-            setPkgCount(data.length);
-        }
+      // Fetch Packages Count
+      const pkgRes = await fetch(`${API_URL}/api/trips`, { headers: { Authorization: `Bearer ${token}` } });
+      if (pkgRes.ok) {
+        const data = await pkgRes.json();
+        setPkgCount(data.length);
+      }
 
-        // Fetch Bookings Count
-        const bkRes = await fetch(`${API_URL}/api/trips/requests`, { headers: { Authorization: `Bearer ${token}` }});
-        if(bkRes.ok) {
-            const data = await bkRes.json();
-            setBookingCount(data.length);
-        }
+      // Fetch Bookings Count
+      const bkRes = await fetch(`${API_URL}/api/trips/requests`, { headers: { Authorization: `Bearer ${token}` } });
+      if (bkRes.ok) {
+        const data = await bkRes.json();
+        const visible = data.filter((b: any) => {
+          const bookingStatus = b.bookingId?.status;
+          const isTripCompleted = b.status === 'Completed';
+          const isBookingCheckedOut = bookingStatus === 'CheckedOut';
+          return !(isTripCompleted && isBookingCheckedOut);
+        });
+        setBookingCount(visible.length);
+      }
 
     } catch (e) { console.error(e); }
   };
@@ -47,8 +53,8 @@ export default function TripPackages() {
   }, [activeTab]); // Refresh when tab changes
 
   const handleAddClick = () => {
-      if(activeTab === "packages") setIsAddModalOpen(true);
-      else setIsBookingModalOpen(true);
+    if (activeTab === "packages") setIsAddModalOpen(true);
+    else setIsBookingModalOpen(true);
   };
 
   return (
@@ -70,22 +76,20 @@ export default function TripPackages() {
         <div className="flex space-x-6 border-b mb-6">
           <button
             onClick={() => setActiveTab("packages")}
-            className={`flex items-center space-x-2 pb-3 px-1 font-medium transition-colors ${
-              activeTab === "packages"
+            className={`flex items-center space-x-2 pb-3 px-1 font-medium transition-colors ${activeTab === "packages"
                 ? "border-b-2 border-blue-600 text-blue-600"
                 : "text-gray-700 hover:text-gray-900"
-            }`}
+              }`}
           >
             <Package className="w-5 h-5" />
             <span>Packages ({pkgCount})</span>
           </button>
           <button
             onClick={() => setActiveTab("bookings")}
-            className={`flex items-center space-x-2 pb-3 px-1 font-medium transition-colors ${
-              activeTab === "bookings"
+            className={`flex items-center space-x-2 pb-3 px-1 font-medium transition-colors ${activeTab === "bookings"
                 ? "border-b-2 border-blue-600 text-blue-600"
                 : "text-gray-700 hover:text-gray-900"
-            }`}
+              }`}
           >
             <Clock className="w-5 h-5" />
             <span>Bookings ({bookingCount})</span>
@@ -100,8 +104,8 @@ export default function TripPackages() {
       <AddPackageModal
         isOpen={isAddModalOpen}
         onClose={() => {
-            setIsAddModalOpen(false);
-            fetchCounts(); // Refresh count on close
+          setIsAddModalOpen(false);
+          fetchCounts(); // Refresh count on close
         }}
       />
 
@@ -109,9 +113,9 @@ export default function TripPackages() {
         isOpen={isBookingModalOpen}
         onClose={() => setIsBookingModalOpen(false)}
         onSuccess={() => {
-            fetchCounts();
-            // Dispatch event to refresh list inside BookingsView
-            window.dispatchEvent(new Event("refreshTripBookings"));
+          fetchCounts();
+          // Dispatch event to refresh list inside BookingsView
+          window.dispatchEvent(new Event("refreshTripBookings"));
         }}
       />
     </AdminReceptionistLayout>

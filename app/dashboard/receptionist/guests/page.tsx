@@ -1,13 +1,14 @@
-/* Receptionist Guest Management */
+/* */
 "use client";
 
-import dayjs from "dayjs";
 import { MoreVertical, RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import GuestDetailsModal from "../../../components/guest/GuestDetailsModal";
 import GuestModel from "../../../components/guest/guestmodel";
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 import { useAuth } from "../../../context/AuthContext";
+// ✅ Make sure to run: npm install dayjs
+import dayjs from "dayjs";
 
 interface Reservation {
     id: string;
@@ -27,7 +28,7 @@ interface Reservation {
     discount: number;
 }
 
-export default function GuestPage() {
+export default function Page() {
     const { token } = useAuth();
     const [reservations, setReservations] = useState<Reservation[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -48,6 +49,7 @@ export default function GuestPage() {
         if (!token) return;
         setIsLoading(true);
         try {
+            // Fetch both bookings and invoices
             const [bookingsResponse, invoicesResponse] = await Promise.all([
                 fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/bookings`, {
                     method: "GET",
@@ -69,6 +71,7 @@ export default function GuestPage() {
                 const bookingsData = await bookingsResponse.json();
                 const invoicesData = invoicesResponse.ok ? await invoicesResponse.json() : [];
 
+                // Create a map of booking ID to invoice data
                 const invoiceMap = new Map();
                 if (Array.isArray(invoicesData)) {
                     invoicesData.forEach((inv: any) => {
@@ -84,19 +87,23 @@ export default function GuestPage() {
                     });
                 }
 
+                // Map Backend Data to UI Interface
                 const mappedData: Reservation[] = bookingsData.map((b: any) => {
                     const checkIn = dayjs(b.checkIn);
                     const checkOut = dayjs(b.checkOut);
                     const nights = checkOut.diff(checkIn, 'day') || 1;
                     const rate = b.roomId?.rate || 0;
 
+                    // Get invoice data if exists
                     const invoiceData = invoiceMap.get(b._id.toString());
+
+                    // Use actual invoice total if available, otherwise calculate from booking
                     const totalAmount = invoiceData?.total || b.roomTotal || b.invoiceTotal || (rate * nights);
                     const amountPaid = invoiceData?.amountPaid || (b.status === 'CheckedOut' ? b.invoiceTotal || 0 : 0);
 
                     return {
-                        id: `#${b._id.slice(-4).toUpperCase()}`,
-                        mongoId: b._id,
+                        id: `#${b._id.slice(-4).toUpperCase()}`, // Short ID for display
+                        mongoId: b._id, // Real ID for actions
                         name: b.guestId?.name || 'Unknown Guest',
                         guestId: typeof b.guestId === 'object' && b.guestId !== null ? b.guestId._id : b.guestId,
                         guestEmail: typeof b.guestId === 'object' && b.guestId !== null ? b.guestId.email : undefined,
@@ -114,6 +121,8 @@ export default function GuestPage() {
                 });
 
                 setReservations(mappedData);
+            } else {
+                console.log("Failed to fetch bookings");
             }
         } catch (error) {
             console.log("Error fetching reservations", error);
@@ -126,9 +135,46 @@ export default function GuestPage() {
         fetchReservations();
     }, [token]);
 
+    // delete reservation
+    const handleDelete = async (reservationId: string) => {
+        if (!window.confirm("Are you sure you want to delete this reservation?")) {
+            setOpenMenu(null);
+            return;
+        }
+        setIsDeleting(reservationId);
+        setDeleteError(null);
+
+        try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/bookings/${reservationId}`, {
+                method: "DELETE",
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+            });
+
+            if (response.ok) {
+                setReservations(prev => prev.filter(res => res.mongoId !== reservationId));
+                setShowDeleteSuccess(true);
+                setTimeout(() => setShowDeleteSuccess(false), 3000);
+            } else {
+                throw new Error("Failed to delete");
+            }
+        } catch (error) {
+            console.log("Delete failed", error);
+            setDeleteError("Failed to delete reservation.");
+            setTimeout(() => setDeleteError(null), 5000);
+        } finally {
+            setIsDeleting(null);
+            setOpenMenu(null);
+        }
+    };
+
+    // Filter reservations
     const getFilteredReservations = () => {
         let filtered = reservations;
 
+        // Basic Filter logic
         if (activeFilter === 'checkIn') {
             filtered = filtered.filter(res => dayjs(res.checkIn).isAfter(dayjs().subtract(1, 'day')));
         } else if (activeFilter === 'checkOut') {
@@ -143,6 +189,21 @@ export default function GuestPage() {
         }
 
         return filtered;
+    };
+
+    const filteredReservations = getFilteredReservations();
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const paginatedReservations = filteredReservations.slice(startIndex, startIndex + itemsPerPage);
+
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'Clean': return 'bg-blue-100 text-blue-800';
+            case 'Dirty': return 'bg-red-100 text-red-800';
+            case 'Inspected': return 'bg-green-100 text-green-800';
+            case 'Occupied': return 'bg-purple-100 text-purple-800';
+            case 'Cleaning': return 'bg-yellow-100 text-yellow-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
     };
 
     const handleViewGuest = (reservation: Reservation) => {
@@ -182,66 +243,13 @@ export default function GuestPage() {
         setIsDetailsModalOpen(true);
     };
 
-    const handleDelete = async (reservationId: string) => {
-        if (!window.confirm("Are you sure you want to delete this reservation?")) {
-            setOpenMenu(null);
-            return;
-        }
-        setIsDeleting(reservationId);
-        setDeleteError(null);
-
-        try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/bookings/${reservationId}`, {
-                method: "DELETE",
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-            });
-
-            if (response.ok) {
-                setReservations(prev => prev.filter(res => res.mongoId !== reservationId));
-                setShowDeleteSuccess(true);
-                setTimeout(() => setShowDeleteSuccess(false), 3000);
-            } else {
-                throw new Error("Failed to delete");
-            }
-        } catch (error) {
-            console.log("Delete failed", error);
-            setDeleteError("Failed to delete reservation.");
-            setTimeout(() => setDeleteError(null), 5000);
-        } finally {
-            setIsDeleting(null);
-            setOpenMenu(null);
-        }
-    };
-
-    const filteredReservations = getFilteredReservations();
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const paginatedReservations = filteredReservations.slice(startIndex, startIndex + itemsPerPage);
-
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'Clean': return 'bg-blue-100 text-blue-800';
-            case 'Dirty': return 'bg-red-100 text-red-800';
-            case 'Inspected': return 'bg-green-100 text-green-800';
-            case 'Occupied': return 'bg-purple-100 text-purple-800';
-            case 'Cleaning': return 'bg-yellow-100 text-yellow-800';
-            default: return 'bg-gray-100 text-gray-800';
-        }
-    };
 
     return (
         <AdminReceptionistLayout role="receptionist">
             <div className="p-6 bg-gray-50 min-h-screen">
+                {/* Success/Error Messages */}
                 {showDeleteSuccess && <div className="mb-4 p-3 bg-green-100 text-green-700 rounded-lg">Reservation deleted!</div>}
                 {deleteError && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">{deleteError}</div>}
-                <div className="flex items-center justify-between mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900">Guest Management</h1>
-                    <button onClick={fetchReservations} className="p-2 rounded-full hover:bg-gray-200 transition-colors" title="Refresh">
-                        <RefreshCw className="h-5 w-5 text-gray-600" />
-                    </button>
-                </div>
 
                 {/* Filter & Search */}
                 <div className="flex items-center justify-between mb-8">
@@ -255,17 +263,22 @@ export default function GuestPage() {
                                 {f === 'all' ? 'All' : f === 'checkIn' ? 'Check In' : 'Check Out'}
                             </button>
                         ))}
+                        <button onClick={fetchReservations} className="p-2 rounded-full hover:bg-gray-200" title="Refresh">
+                            <RefreshCw className="h-4 w-4 text-gray-600" />
+                        </button>
                     </div>
 
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search guest or room..."
-                            className="pl-10 pr-3 py-2.5 w-64 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search room or guest..."
+                                className="pl-10 pr-3 py-2.5 w-64 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -286,7 +299,7 @@ export default function GuestPage() {
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                         </div>
                     ) : paginatedReservations.length === 0 ? (
-                        <div className="py-8 text-center text-gray-500">No guests found</div>
+                        <div className="py-8 text-center text-gray-500">No reservations found</div>
                     ) : (
                         paginatedReservations.map((reservation, index) => (
                             <div key={reservation.mongoId} className="grid grid-cols-7 px-4 py-3 border-b border-gray-100 hover:bg-gray-50 items-center">
@@ -309,9 +322,7 @@ export default function GuestPage() {
                                         <div className="absolute right-0 top-8 w-44 bg-white shadow-2xl rounded-lg border border-gray-200 z-50">
                                             <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100 border-b" onClick={() => { handleViewGuest(reservation); setOpenMenu(null); }}>Booking Details</button>
                                             <button className="text-black w-full text-left px-4 py-2 text-sm hover:bg-gray-100 border-b" onClick={() => { handleViewGuestDetails(reservation); setOpenMenu(null); }}>Guest Details</button>
-                                            <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100" onClick={() => handleDelete(reservation.mongoId)}>
-                                                {isDeleting === reservation.mongoId ? 'Deleting...' : 'Delete'}
-                                            </button>
+                                            <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100" onClick={() => handleDelete(reservation.mongoId)}>Delete</button>
                                         </div>
                                     )}
                                 </div>
@@ -319,27 +330,6 @@ export default function GuestPage() {
                         ))
                     )}
                 </div>
-
-                {/* Pagination */}
-                {filteredReservations.length > itemsPerPage && (
-                    <div className="mt-6 flex justify-between items-center">
-                        <button
-                            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                            disabled={currentPage === 1}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-                        >
-                            Previous
-                        </button>
-                        <span className="text-sm text-gray-600">Page {currentPage}</span>
-                        <button
-                            onClick={() => setCurrentPage(currentPage + 1)}
-                            disabled={startIndex + itemsPerPage >= filteredReservations.length}
-                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-                        >
-                            Next
-                        </button>
-                    </div>
-                )}
             </div>
 
             <GuestModel isOpen={isGuestModalOpen} onClose={() => setIsGuestModalOpen(false)} guestData={selectedGuest} />

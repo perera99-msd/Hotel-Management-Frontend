@@ -1,9 +1,10 @@
+// app/dashboard/admin/rooms/page.tsx
 "use client";
 
-import { auth } from "@/app/lib/firebase";
+import { auth } from "@/app/lib/firebase"; // Import Auth
 import { Filter, Grid, List, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "react-hot-toast"; // Using hot-toast for consistency
+import { toast } from "react-hot-toast"; // Switched to hot-toast for consistency
 import AdminReceptionistLayout from "../../../components/layout/AdminReceptionistLayout";
 import CheckInForm from "../../../components/rooms/CheckInForm";
 import RoomFilters from "../../../components/rooms/RoomFilters";
@@ -36,15 +37,25 @@ export interface Room {
 }
 
 export default function Rooms() {
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [showAddForm, setShowAddForm] = useState(false);
+  // Floors dynamic options (fetched from settings)
+  const [floors, setFloors] = useState<number[]>([0]);
+  const floorOptions = [
+    { value: "all", label: "All Floors" },
+    ...[...floors].sort((a, b) => a - b).map(f => ({ value: String(f), label: f === 0 ? 'Ground' : `Floor ${f}` }))
+  ];
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
+
+  // ✅ ADDED: State to track if the form is in View-Only mode
   const [isViewOnly, setIsViewOnly] = useState(false);
+
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
-  // Data State
+  // ✅ STATE: Initialize empty, fetch from backend
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [showAddForm, setShowAddForm] = useState(false);
 
   // Check-in form state
   const [showCheckInForm, setShowCheckInForm] = useState(false);
@@ -76,13 +87,9 @@ export default function Rooms() {
     amenities: [],
     maxOccupancy: 1,
     floor: 0,
-    images: [], // ✅ Initialize with empty images array
   });
 
-  // Floors
-  const [floors, setFloors] = useState<number[]>([0]);
-
-  // --- Data Fetching ---
+  // ✅ FETCH ROOMS FUNCTION
   const fetchRooms = async () => {
     try {
       setLoading(true);
@@ -122,7 +129,7 @@ export default function Rooms() {
 
         setRooms(mappedRooms);
       } else {
-        console.error("Failed to fetch rooms");
+        console.error("Failed to fetch rooms:", res.statusText);
         toast.error("Failed to load rooms");
       }
     } catch (error) {
@@ -133,6 +140,7 @@ export default function Rooms() {
     }
   };
 
+  // ✅ EFFECT: Load rooms on mount / auth change
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       if (user) {
@@ -144,39 +152,21 @@ export default function Rooms() {
     return () => unsubscribe();
   }, []);
 
-  const fetchFloors = async () => {
-    try {
-      const user = auth.currentUser; if (!user) return;
-      const token = await user.getIdToken();
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const res = await fetch(`${API_URL}/api/settings/floors`, { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        const uniqueFloors = Array.from(new Set([0, ...(data.floors || [])]));
-        setFloors(uniqueFloors.sort((a: number, b: number) => a - b));
-      }
-    } catch (e) {
-      console.error("Failed to fetch floors", e);
-    }
-  };
-
-  useEffect(() => { fetchFloors(); }, []);
-
-  // --- Handlers ---
   const resetRoomForm = () => {
     setNewRoom({
       id: "",
+      name: "",
       number: "",
       type: "single",
+      tier: "Normal",
       status: "available",
       rate: 0,
       amenities: [],
       maxOccupancy: 1,
       floor: 0,
-      images: [], // ✅ Initialize empty images array
     });
     setEditingRoom(null);
-    setIsViewOnly(false);
+    setIsViewOnly(false); // ✅ RESET view only state
     setErrors({});
   };
 
@@ -187,8 +177,9 @@ export default function Rooms() {
     setCheckInErrors({});
   };
 
+  // ✅ HANDLER: Called when RoomForm successfully saves/updates
   const handleRoomSaved = () => {
-    fetchRooms();
+    fetchRooms(); // Refresh the list from backend
     setShowAddForm(false);
     resetRoomForm();
   };
@@ -208,35 +199,16 @@ export default function Rooms() {
   const handleEditRoom = (room: Room) => {
     setEditingRoom(room);
     setNewRoom(room);
-    setIsViewOnly(false);
+    setIsViewOnly(false); // ✅ Ensure editing is allowed
     setShowAddForm(true);
   };
 
+  // ✅ NEW HANDLER: For viewing without editing
   const handleViewRoom = (room: Room) => {
     setEditingRoom(room);
     setNewRoom(room);
-    setIsViewOnly(true);
+    setIsViewOnly(true); // ✅ Set to View Only mode
     setShowAddForm(true);
-  };
-
-  const handleDuplicateRoom = (room: Room) => {
-    setEditingRoom(null);
-    setNewRoom({
-      id: "",
-      name: room.name,
-      number: "",
-      type: room.type,
-      tier: room.tier || 'Normal',
-      status: room.status,
-      rate: room.rate,
-      amenities: room.amenities,
-      maxOccupancy: room.maxOccupancy,
-      floor: room.floor,
-      images: room.images ? [...room.images] : [], // ✅ Copy images when duplicating
-    });
-    setIsViewOnly(false);
-    setShowAddForm(true);
-    toast.success("Duplicate mode: enter new room number");
   };
 
   const handleDeleteRoom = async (room: Room) => {
@@ -254,7 +226,7 @@ export default function Rooms() {
 
         if (res.ok) {
           toast.success(`Room ${room.number} deleted successfully`);
-          fetchRooms();
+          fetchRooms(); // Refresh list
         } else {
           throw new Error("Failed to delete");
         }
@@ -326,7 +298,7 @@ export default function Rooms() {
     resetCheckInForm();
   };
 
-  // --- Filtering Logic ---
+  // Filter Logic
   const filteredRooms = rooms.filter(
     (room) =>
       (statusFilter === "all" || room.status === statusFilter) &&
@@ -336,6 +308,7 @@ export default function Rooms() {
         room.number.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  // Status Counts (Dynamic)
   const statusCounts = {
     total: rooms.length,
     available: rooms.filter((r) => r.status === "available").length,
@@ -364,10 +337,24 @@ export default function Rooms() {
     { value: "family", label: "Family" },
   ];
 
-  const floorOptions = [
-    { value: "all", label: "All Floors" },
-    ...[...floors].sort((a, b) => a - b).map(f => ({ value: String(f), label: f === 0 ? "Ground" : `Floor ${f}` }))
-  ];
+  const fetchFloors = async () => {
+    try {
+      const user = auth.currentUser; if (!user) return;
+      const token = await user.getIdToken();
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      const res = await fetch(`${API_URL}/api/settings/floors`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        // Ensure ground (0) always stays present even if backend omits it
+        const uniqueFloors = Array.from(new Set([0, ...(data.floors || [])]));
+        setFloors(uniqueFloors.sort((a: number, b: number) => a - b));
+      }
+    } catch (e) {
+      console.error("Failed to fetch floors", e);
+    }
+  };
+
+  useEffect(() => { fetchFloors(); }, []);
 
   return (
     <AdminReceptionistLayout role="receptionist">
@@ -474,6 +461,38 @@ export default function Rooms() {
           }}
         />
 
+        {/* Floor Management (Stack-like) */}
+        <div className="card bg-white rounded-lg shadow-lg p-4 border border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-gray-900">Floors</h3>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap mb-3">
+            {floors.map((f) => (
+              <span key={f} className="px-3 py-1 rounded-full bg-gray-100 text-gray-800 text-sm">{f === 0 ? 'Ground' : `Floor ${f}`}</span>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="bg-blue-600 text-white px-3 py-2 rounded-lg" onClick={async () => {
+              const user = auth.currentUser; if (!user) return; const token = await user.getIdToken();
+              const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+              const res = await fetch(`${API_URL}/api/settings/floors`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+              if (res.ok) { toast.success('Added new floor'); fetchFloors(); }
+            }}>Add Floor</button>
+            <button className="bg-red-600 text-white px-3 py-2 rounded-lg" onClick={async () => {
+              const top = floors[floors.length - 1] ?? 0;
+              if (top === 0) { toast.error('Cannot remove ground floor'); return; }
+              const user = auth.currentUser; if (!user) return; const token = await user.getIdToken();
+              const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+              const res = await fetch(`${API_URL}/api/settings/floors/top`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+              if (res.ok) { toast.success(`Removed Floor ${top}`); fetchFloors(); }
+              else {
+                const err = await res.json().catch(() => ({} as any));
+                toast.error(err?.error || 'Cannot remove floor while rooms are assigned');
+              }
+            }}>Remove Top Floor</button>
+          </div>
+        </div>
+
         {/* Modal: Room Form */}
         {showAddForm && (
           <RoomForm
@@ -487,7 +506,7 @@ export default function Rooms() {
               resetRoomForm();
             }}
             onSave={handleRoomSaved}
-            readOnly={isViewOnly}
+            readOnly={isViewOnly} // ✅ PASSED: View-Only Mode status
           />
         )}
 
@@ -528,8 +547,27 @@ export default function Rooms() {
             rooms={filteredRooms}
             viewMode={viewMode}
             onEdit={handleEditRoom}
-            onView={handleViewRoom}
-            onDuplicate={handleDuplicateRoom}
+            onView={handleViewRoom} // ✅ FIXED: Uses correct view handler
+            onDuplicate={(room) => {
+              // Pre-fill form with same data but blank number; keep name
+              setEditingRoom(null);
+              setNewRoom({
+                id: "",
+                name: room.name,
+                number: "",
+                type: room.type,
+                tier: room.tier || 'Normal',
+                status: room.status,
+                rate: room.rate,
+                amenities: room.amenities,
+                maxOccupancy: room.maxOccupancy,
+                floor: room.floor,
+                images: room.images ? [...room.images] : [],
+              });
+              setIsViewOnly(false);
+              setShowAddForm(true);
+              toast.success("Duplicate mode: enter new room number");
+            }}
             onStatusChange={handleStatusChange}
             onCheckIn={handleCheckIn}
             onCheckOut={handleCheckOut}
