@@ -3,7 +3,7 @@
 import { useAuth } from "@/app/context/AuthContext";
 import { format } from "date-fns";
 import { FileText, Loader2, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import BillCard, { Bill } from "../../../components/billing/BillCard";
 import BillCreation from "../../../components/billing/BillCreation";
@@ -26,8 +26,18 @@ export default function Billing() {
   const [showPaymentSummary, setShowPaymentSummary] = useState(false);
   const [billToView, setBillToView] = useState<Bill | null>(null);
   const [billToEdit, setBillToEdit] = useState<Bill | null>(null);
+  const billFormRef = useRef<HTMLDivElement>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
+  const handleOpenCreateBill = () => {
+    setBillToView(null);
+    setBillToEdit(null);
+    setShowBillForm(true);
+    setTimeout(() => {
+      billFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
 
   const matchesDateFilter = (billDate: Date) => {
     const now = new Date();
@@ -96,27 +106,33 @@ export default function Billing() {
           const mappedBills: Bill[] = invData
             .filter((inv: any) => (inv.status || '').toLowerCase() !== 'cancelled')
             .filter((inv: any) => (inv.bookingId?.status || '').toLowerCase() !== 'cancelled')
-            .map((inv: any) => ({
-              id: inv._id,
-              bookingId: inv.bookingId?._id || "N/A",
-              guestId: inv.bookingId?.guestId?._id || inv.guestId || "Unknown",
-              guestName: inv.bookingId?.guestId?.name || "Unknown Guest",
-              items: inv.lineItems.map((item: any) => ({
-                description: item.description,
-                quantity: item.qty || 1,
-                rate: (item.amount / (item.qty || 1)),
-                amount: item.amount,
-                category: item.category || 'other',
-                source: item.source
-              })),
-              subtotal: inv.subtotal,
-              tax: inv.tax,
-              discount: inv.discount || 0,
-              total: inv.total,
-              status: inv.status,
-              createdAt: new Date(inv.createdAt),
-              paidAt: inv.paidAt ? new Date(inv.paidAt) : undefined
-            }));
+            .map((inv: any) => {
+              const normalizedStatus = (inv.status || 'pending').toString().toLowerCase();
+              const mappedStatus = normalizedStatus === 'paid' || normalizedStatus === 'cancelled'
+                ? normalizedStatus
+                : 'pending';
+              return ({
+                id: inv._id,
+                bookingId: inv.bookingId?._id || "N/A",
+                guestId: inv.bookingId?.guestId?._id || inv.guestId || "Unknown",
+                guestName: inv.bookingId?.guestId?.name || "Unknown Guest",
+                items: inv.lineItems.map((item: any) => ({
+                  description: item.description,
+                  quantity: item.qty || 1,
+                  rate: (item.amount / (item.qty || 1)),
+                  amount: item.amount,
+                  category: item.category || 'other',
+                  source: item.source
+                })),
+                subtotal: inv.subtotal,
+                tax: inv.tax,
+                discount: inv.discount || 0,
+                total: inv.total,
+                status: mappedStatus,
+                createdAt: new Date(inv.createdAt),
+                paidAt: inv.paidAt ? new Date(inv.paidAt) : undefined
+              });
+            });
           setBills(mappedBills);
 
           // Annotate bookings with invoice status for dropdown clarity
@@ -157,6 +173,7 @@ export default function Billing() {
 
   // Stats Calculation
   const dateFilteredBills = bills.filter((b) => matchesDateFilter(new Date(b.createdAt)) && b.status !== "cancelled");
+  const cancelledBills = bills.filter((b) => matchesDateFilter(new Date(b.createdAt)) && b.status === "cancelled");
 
   const stats = {
     total: dateFilteredBills.length,
@@ -167,6 +184,28 @@ export default function Billing() {
     totalTax: dateFilteredBills.filter((b) => b.status === "paid").reduce((sum, b) => sum + (b.tax || 0), 0),
     cancelled: dateFilteredBills.filter((b) => b.status === "cancelled").length,
   };
+
+  const reportTotals = {
+    totalBilled: dateFilteredBills.reduce((sum, b) => sum + b.total, 0),
+    paidAmount: dateFilteredBills.filter((b) => b.status === "paid").reduce((sum, b) => sum + b.total, 0),
+    pendingAmount: dateFilteredBills.filter((b) => b.status === "pending").reduce((sum, b) => sum + b.total, 0),
+    cancelledAmount: cancelledBills.reduce((sum, b) => sum + b.total, 0),
+  };
+
+  const reportDateLabel = (() => {
+    switch (dateFilter) {
+      case "today":
+        return "Today";
+      case "week":
+        return "This week";
+      case "month":
+        return "This month";
+      case "year":
+        return "This year";
+      default:
+        return "All time";
+    }
+  })();
 
   const getGuestForBill = (guestId: string) => {
     return guests.find((g) => g.id === guestId) || { id: guestId, name: 'Unknown', email: '', phone: '', bookingHistory: [] };
@@ -335,12 +374,13 @@ export default function Billing() {
   // F. Download Single Bill (Simple HTML Receipt)
   const handleDownloadBill = (bill: Bill) => {
     const guest = getGuestForBill(bill.guestId);
+    const shortBillId = String(bill.id).slice(-6);
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(`
         <html>
           <head>
-            <title>Bill Receipt #${bill.id}</title>
+            <title>Bill Receipt #${shortBillId}</title>
             <style>
               body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
               .header { text-align: center; margin-bottom: 40px; }
@@ -354,7 +394,7 @@ export default function Billing() {
           <body>
             <div class="header">
               <h1>Hotel Bill Receipt</h1>
-              <p>ID: ${bill.id}</p>
+              <p>ID: ${shortBillId}</p>
               <p>Date: ${format(new Date(bill.createdAt), "PPP")}</p>
               <p class="status">${bill.status}</p>
             </div>
@@ -395,7 +435,96 @@ export default function Billing() {
 
   return (
     <AdminReceptionistLayout role="receptionist">
-      <div className="space-y-8 animate-fade-in print:p-0">
+      <div className="space-y-8 animate-fade-in print:p-0 pb-32">
+
+        {/* Printable Report */}
+        <section className="hidden print:block">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">Billing Report</h1>
+            <p className="text-sm text-gray-600">Range: {reportDateLabel}</p>
+            <p className="text-xs text-gray-500">Generated: {new Date().toLocaleString()}</p>
+          </div>
+
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className="border rounded-lg p-3">
+              <div className="text-xs text-gray-500">Total Billed</div>
+              <div className="text-lg font-bold text-gray-900">${reportTotals.totalBilled.toLocaleString()}</div>
+            </div>
+            <div className="border rounded-lg p-3">
+              <div className="text-xs text-gray-500">Paid</div>
+              <div className="text-lg font-bold text-emerald-600">${reportTotals.paidAmount.toLocaleString()}</div>
+            </div>
+            <div className="border rounded-lg p-3">
+              <div className="text-xs text-gray-500">Pending</div>
+              <div className="text-lg font-bold text-yellow-600">${reportTotals.pendingAmount.toLocaleString()}</div>
+            </div>
+            <div className="border rounded-lg p-3">
+              <div className="text-xs text-gray-500">Cancelled</div>
+              <div className="text-lg font-bold text-red-600">${reportTotals.cancelledAmount.toLocaleString()}</div>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">Payment Breakdown</h2>
+            <div className="space-y-2">
+              {(() => {
+                const max = Math.max(reportTotals.totalBilled, reportTotals.paidAmount, reportTotals.pendingAmount, reportTotals.cancelledAmount, 1);
+                const toPct = (v: number) => `${Math.round((v / max) * 100)}%`;
+                return (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <div className="w-20 text-xs text-gray-600">Paid</div>
+                      <div className="flex-1 h-2 bg-gray-100 rounded">
+                        <div className="h-2 bg-emerald-500 rounded" style={{ width: toPct(reportTotals.paidAmount) }} />
+                      </div>
+                      <div className="w-20 text-xs text-right text-gray-600">${reportTotals.paidAmount.toLocaleString()}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-20 text-xs text-gray-600">Pending</div>
+                      <div className="flex-1 h-2 bg-gray-100 rounded">
+                        <div className="h-2 bg-yellow-500 rounded" style={{ width: toPct(reportTotals.pendingAmount) }} />
+                      </div>
+                      <div className="w-20 text-xs text-right text-gray-600">${reportTotals.pendingAmount.toLocaleString()}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-20 text-xs text-gray-600">Cancelled</div>
+                      <div className="flex-1 h-2 bg-gray-100 rounded">
+                        <div className="h-2 bg-red-500 rounded" style={{ width: toPct(reportTotals.cancelledAmount) }} />
+                      </div>
+                      <div className="w-20 text-xs text-right text-gray-600">${reportTotals.cancelledAmount.toLocaleString()}</div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700 mb-2">Bills Detail</h2>
+            <table className="w-full text-xs border border-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left p-2 border-b">Bill ID</th>
+                  <th className="text-left p-2 border-b">Guest</th>
+                  <th className="text-left p-2 border-b">Date</th>
+                  <th className="text-left p-2 border-b">Status</th>
+                  <th className="text-right p-2 border-b">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredBills.map((bill) => (
+                  <tr key={`print-${bill.id}`} className="border-b">
+                    <td className="p-2">#{String(bill.id).slice(-6)}</td>
+                    <td className="p-2">{getGuestForBill(bill.guestId).name || (bill as any).guestName}</td>
+                    <td className="p-2">{format(new Date(bill.createdAt), "yyyy-MM-dd")}</td>
+                    <td className="p-2 capitalize">{bill.status}</td>
+                    <td className="p-2 text-right">${bill.total.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         {/* Header (Hidden when printing report) */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8 print:hidden">
@@ -405,7 +534,7 @@ export default function Billing() {
           </div>
           <button
             className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition group"
-            onClick={() => { setBillToView(null); setBillToEdit(null); setShowBillForm(true); }}
+            onClick={handleOpenCreateBill}
           >
             <Plus className="h-4 w-4 mr-2 group-hover:rotate-90 transition-transform" />
             Create Bill
@@ -468,17 +597,19 @@ export default function Billing() {
 
         {/* Create/View Modal */}
         {showBillForm && (
-          <BillCreation
-            onClose={() => setShowBillForm(false)}
-            guests={guests}
-            bookings={bookings}
-            initialGuestId=""
-            initialBookingId=""
-            initialStatus="pending"
-            mode={billToEdit ? "edit" : billToView ? "view" : "create"}
-            billToView={billToEdit || billToView || undefined}
-            onCreateBill={handleCreateBillSubmit}
-          />
+          <div ref={billFormRef}>
+            <BillCreation
+              onClose={() => setShowBillForm(false)}
+              guests={guests}
+              bookings={bookings}
+              initialGuestId=""
+              initialBookingId=""
+              initialStatus="pending"
+              mode={billToEdit ? "edit" : billToView ? "view" : "create"}
+              billToView={billToEdit || billToView || undefined}
+              onCreateBill={handleCreateBillSubmit}
+            />
+          </div>
         )}
 
         {/* Payment Summary Modal */}
@@ -569,13 +700,15 @@ export default function Billing() {
         )}
 
         {/* Quick Actions (Hidden in print) */}
-        <div className="print:hidden">
-          <QuickActions
-            onCreateBillClick={() => { setBillToView(null); setBillToEdit(null); setShowBillForm(true); }}
-            onGenerateReport={handleGenerateReport}
-            onExportBills={handleExportBills}
-            onPaymentSummary={() => setShowPaymentSummary(true)}
-          />
+        <div className="print:hidden sticky bottom-4 z-20">
+          <div className="bg-gray-50/90 backdrop-blur-md border border-gray-200 rounded-xl shadow-lg">
+            <QuickActions
+              onCreateBillClick={handleOpenCreateBill}
+              onGenerateReport={handleGenerateReport}
+              onExportBills={handleExportBills}
+              onPaymentSummary={() => setShowPaymentSummary(true)}
+            />
+          </div>
         </div>
       </div>
     </AdminReceptionistLayout>

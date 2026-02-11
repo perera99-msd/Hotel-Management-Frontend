@@ -14,7 +14,7 @@ export default function AdminReceptionistLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen overflow-x-hidden">
       {/* Sidebar */}
       <Sidebar
         role={role}
@@ -28,7 +28,9 @@ export default function AdminReceptionistLayout({
           dashboardType={role}
           onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
         />
-        <main className="flex-1 relative bg-gray-50">{children}</main>
+        <main className="flex-1 min-w-0 relative bg-gray-50 p-4 md:p-6 lg:p-8 overflow-x-hidden">
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -1,14 +1,14 @@
-import React from "react";
+import { format } from "date-fns";
 import {
-  FileText,
+  Calendar,
+  CreditCard,
   Download,
   Eye,
-  CreditCard,
-  User,
-  Calendar,
+  FileText,
   Trash2,
+  User,
 } from "lucide-react";
-import { format } from "date-fns";
+import React from "react";
 
 interface BillCardProps {
   bill: Bill;
@@ -102,6 +102,8 @@ export default function BillCard({
     }
   };
 
+  const shortBillId = String(bill.id).slice(-6);
+
   return (
     <div className="card flex flex-col justify-between h-full p-4 bg-white rounded-lg shadow hover:shadow-md transition-shadow">
       <div className="space-y-4 flex-grow">
@@ -113,7 +115,7 @@ export default function BillCard({
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                Bill #{bill.id}
+                Bill #{shortBillId}
               </h3>
               <div className="flex items-center space-x-4 mt-1">
                 <div className="flex items-center text-sm text-gray-500">
