@@ -71,6 +71,8 @@ export default function FrontDeskPage() {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
   const [isNewBookingOpen, setIsNewBookingOpen] = useState(false);
+  const [preSelectedRoomId, setPreSelectedRoomId] = useState<string | undefined>(undefined);
+  const [preSelectedDate, setPreSelectedDate] = useState<string | undefined>(undefined);
 
   const monthStart = useMemo(
     () => new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1),
@@ -164,6 +166,16 @@ export default function FrontDeskPage() {
     fetchRooms();
     fetchBookings();
     setIsNewBookingOpen(false);
+    setPreSelectedRoomId(undefined);
+    setPreSelectedDate(undefined);
+  };
+
+  const handleEmptyCellClick = (roomId: string, date: Date) => {
+    // Format date as YYYY-MM-DD for the booking form
+    const formattedDate = date.toISOString().split('T')[0];
+    setPreSelectedRoomId(roomId);
+    setPreSelectedDate(formattedDate);
+    setIsNewBookingOpen(true);
   };
 
   const getBookingStatusForDay = (booking: BookingRow, date: Date) => {
@@ -418,6 +430,7 @@ export default function FrontDeskPage() {
                       {daysInMonth.map((date) => {
                         const bookingMatch = getBookingForRoomDay(room.id, date);
                         const isToday = isSameDay(date, today);
+                        const isPastDate = normalizeDate(date) < normalizeDate(today);
                         const showCleaning = isToday && room.computedStatus === "Needs Cleaning" && !bookingMatch;
 
                         return (
@@ -442,6 +455,17 @@ export default function FrontDeskPage() {
                               <div className={`w-full h-full flex items-center justify-center rounded-md border border-dashed border-orange-200 bg-orange-50 text-[10px] text-orange-600 font-medium`}>
                                 Cleaning
                               </div>
+                            ) : !isPastDate ? (
+                              <button
+                                type="button"
+                                onClick={() => handleEmptyCellClick(room.id, date)}
+                                className="w-full h-full rounded-md border border-dashed border-gray-200 bg-gray-50/50 hover:bg-blue-50/50 hover:border-blue-300 transition-all cursor-pointer group"
+                                title={`Create booking for ${room.roomNumber} on ${date.toLocaleDateString()}`}
+                              >
+                                <div className="text-gray-400 group-hover:text-blue-500 transition-colors">
+                                  <Plus className="h-3 w-3 mx-auto" />
+                                </div>
+                              </button>
                             ) : null}
                           </div>
                         );
@@ -456,9 +480,15 @@ export default function FrontDeskPage() {
 
         <NewBookingModal
           isOpen={isNewBookingOpen}
-          onClose={() => setIsNewBookingOpen(false)}
+          onClose={() => {
+            setIsNewBookingOpen(false);
+            setPreSelectedRoomId(undefined);
+            setPreSelectedDate(undefined);
+          }}
           editingBooking={null}
           onUpdateBooking={handleBookingCreated}
+          preSelectedRoomId={preSelectedRoomId}
+          preSelectedCheckIn={preSelectedDate}
         />
 
         {/* Booking Details Modal */}

@@ -59,6 +59,17 @@ export default function FrontDeskModal({ isOpen, onClose, onSuccess }: FrontDesk
       return;
     }
 
+    // Validate dates are not in the past
+    const checkInDate = new Date(formData.checkInDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    checkInDate.setHours(0, 0, 0, 0);
+    
+    if (checkInDate < today) {
+      alert("Cannot book past dates");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -107,6 +118,8 @@ export default function FrontDeskModal({ isOpen, onClose, onSuccess }: FrontDesk
   };
 
   if (!isOpen) return null;
+
+  const todayDate = new Date().toISOString().split('T')[0];
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -176,11 +189,11 @@ export default function FrontDeskModal({ isOpen, onClose, onSuccess }: FrontDesk
 
                       <div>
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Check In</label>
-                        <input type="date" name="checkInDate" value={formData.checkInDate} onChange={handleInputChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none text-gray-900" required />
+                        <input type="date" name="checkInDate" value={formData.checkInDate} onChange={handleInputChange} min={todayDate} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none text-gray-900" required />
                       </div>
                       <div>
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Check Out</label>
-                        <input type="date" name="checkOutDate" value={formData.checkOutDate} onChange={handleInputChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none text-gray-900" required />
+                        <input type="date" name="checkOutDate" value={formData.checkOutDate} onChange={handleInputChange} min={formData.checkInDate || todayDate} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none text-gray-900" required />
                       </div>
                       <div className="col-span-2">
                         <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5 block">Status</label>
