@@ -19,6 +19,8 @@ interface NewBookingModalProps {
   onClose: () => void;
   editingBooking?: Booking | null;
   onUpdateBooking?: () => void;
+  preSelectedRoomId?: string;
+  preSelectedCheckIn?: string;
 }
 
 interface Room {
@@ -56,6 +58,8 @@ export default function NewBookingModal({
   onClose,
   editingBooking,
   onUpdateBooking,
+  preSelectedRoomId,
+  preSelectedCheckIn,
 }: NewBookingModalProps) {
   const [formData, setFormData] = useState({
     roomId: "",
@@ -150,8 +154,15 @@ export default function NewBookingModal({
       setNewGuest({ name: "", email: "", phone: "", idNumber: "", password: "" });
       setAvailableRooms([]);
       setActiveTab('search');
+    } else if (isOpen && !editingBooking && (preSelectedRoomId || preSelectedCheckIn)) {
+      // Pre-populate form with selected room/date from calendar
+      setFormData((prev) => ({
+        ...prev,
+        roomId: preSelectedRoomId || prev.roomId,
+        checkIn: preSelectedCheckIn || prev.checkIn,
+      }));
     }
-  }, [editingBooking, isOpen, guests]);
+  }, [editingBooking, isOpen, guests, preSelectedRoomId, preSelectedCheckIn]);
 
   useEffect(() => {
     if (!searchQuery || formData.guestId) {
@@ -280,6 +291,15 @@ export default function NewBookingModal({
     // Check date logic
     const checkInDate = new Date(formData.checkIn);
     const checkOutDate = new Date(formData.checkOut);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalize to start of day
+    checkInDate.setHours(0, 0, 0, 0); // Normalize to start of day
+    
+    if (checkInDate < today) {
+      toast.error("Cannot book past dates");
+      return;
+    }
+    
     if (checkOutDate < checkInDate) {
       toast.error("Check-out after check-in");
       return;
@@ -389,6 +409,7 @@ export default function NewBookingModal({
   if (!isOpen) return null;
 
   const selectedRoom = rooms.find((r) => r._id === formData.roomId);
+  const todayDate = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
 
   const dealStatusAllowed = ['Ongoing', 'New', 'Inactive', 'Full'];
   const dateForDeal = formData.checkIn ? new Date(formData.checkIn) : new Date();
@@ -425,6 +446,7 @@ export default function NewBookingModal({
                 <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <input
                   type="date"
+                  min={todayDate}
                   className="pl-10 w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
                   value={formData.checkIn}
                   onChange={(e) => setFormData({ ...formData, checkIn: e.target.value })}
